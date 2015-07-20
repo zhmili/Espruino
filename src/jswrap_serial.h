@@ -14,6 +14,7 @@
 #include "jsvar.h"
 
 
+JsVar *jswrap_serial_constructor();
 void jswrap_serial_setup(JsVar *parent, JsVar *baud, JsVar *options);
 void jswrap_serial_print(JsVar *parent, JsVar *str);
 void jswrap_serial_println(JsVar *parent, JsVar *str);
