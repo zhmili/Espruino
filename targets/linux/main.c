@@ -7,6 +7,7 @@
 
 #include "jslex.h"
 #include "jsvar.h"
+#include "jsvarcache.h"
 #include "jsparse.h"
 #include "jswrap_json.h"
 

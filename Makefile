@@ -690,6 +690,7 @@ src/jswrap_waveform.c
 SOURCES = \
 src/jslex.c \
 src/jsvar.c \
+src/jsvarcache.c \
 src/jsvariterator.c \
 src/jsutils.c \
 src/jsnative.c \
@@ -1197,7 +1198,6 @@ endif #USB
 # Used for F1 and F3
 ifdef STM32_LEGACY_USB
 DEFINES += -DLEGACY_USB
-INCLUDE += -I$(ROOT)/targetlibs/stm32legacyusb/lib -I$(ROOT)/targetlibs/stm32legacyusb
 SOURCES +=                              \
 targetlibs/stm32legacyusb/lib/otgd_fs_cal.c       \
 targetlibs/stm32legacyusb/lib/otgd_fs_dev.c       \

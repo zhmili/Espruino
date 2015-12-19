@@ -12,6 +12,7 @@
  * ----------------------------------------------------------------------------
  */
 #include "jsutils.h"
+#include "jsvarcache.h"
 #include "jsinteractive.h"
 #include "jshardware.h"
 #include "jstimer.h"

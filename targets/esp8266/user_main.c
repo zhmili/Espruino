@@ -23,6 +23,7 @@
 #define _GCC_WRAP_STDINT_H
 typedef long long int64_t;
 
+#include <jsvarcache.h>
 #include <jsdevices.h>
 #include <jsinteractive.h>
 #include <jswrap_esp8266_network.h>

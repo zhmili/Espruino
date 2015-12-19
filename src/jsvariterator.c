@@ -12,6 +12,7 @@
  * ----------------------------------------------------------------------------
  */
 #include "jsvariterator.h"
+#include "jsvarcache.h"
 
 /**
  * Iterate over the contents of the content of a variable, calling callback for each.

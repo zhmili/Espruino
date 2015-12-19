@@ -19,6 +19,7 @@
   #include "usb_device.h"
  #endif
 #endif
+#include "jsvarcache.h"
 #include "jsinteractive.h"
 #include "jshardware.h"
 

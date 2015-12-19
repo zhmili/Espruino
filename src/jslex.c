@@ -12,6 +12,7 @@
  * ----------------------------------------------------------------------------
  */
 #include "jslex.h"
+#include "jsvarcache.h"
 
 void jslCharPosFree(JslCharPos *pos) {
   jsvStringIteratorFree(&pos->it);

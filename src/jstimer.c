@@ -12,6 +12,7 @@
  * ----------------------------------------------------------------------------
  */
 #include "jstimer.h"
+#include "jsvarcache.h"
 #include "jsparse.h"
 #include "jsinteractive.h"
 

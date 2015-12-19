@@ -14,6 +14,7 @@
  * ----------------------------------------------------------------------------
  */
 #include "jswrap_arraybuffer.h"
+#include "jsvarcache.h"
 #include "jsparse.h"
 #include "jsinteractive.h"
 

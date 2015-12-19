@@ -13,6 +13,7 @@
  */
  
 #include "platform_config.h"
+#include "jsvarcache.h"
 #include "jsinteractive.h"
 #include "jshardware.h"
 

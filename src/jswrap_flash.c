@@ -14,6 +14,7 @@
  * ----------------------------------------------------------------------------
  */
 #include "jswrap_flash.h"
+#include "jsvarcache.h"
 #include "jshardware.h"
 #include "jsvariterator.h"
 #include "jsinteractive.h"

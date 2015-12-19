@@ -12,6 +12,7 @@
  * ----------------------------------------------------------------------------
  */
 #include "jsparse.h"
+#include "jsvarcache.h"
 #include "jsinteractive.h"
 #include "jswrapper.h"
 #include "jsnative.h"

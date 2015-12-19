@@ -14,6 +14,7 @@
  * ----------------------------------------------------------------------------
  */
 #include "jswrap_waveform.h"
+#include "jsvarcache.h"
 #include "jswrap_arraybuffer.h"
 #include "jsvar.h"
 #include "jsparse.h"

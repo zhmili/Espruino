@@ -283,24 +283,8 @@ static ALWAYS_INLINE JsVarRefCounter jsvGetRefs(JsVar *v) { return v->varData.re
 static ALWAYS_INLINE void jsvSetRefs(JsVar *v, JsVarRefCounter refs) { v->varData.ref.refs = refs; }
 static ALWAYS_INLINE unsigned char jsvGetLocks(JsVar *v) { return (unsigned char)((v->flags>>JSV_LOCK_SHIFT) & JSV_LOCK_MAX); }
 
-// For debugging/testing ONLY - maximum # of vars we are allowed to use
-void jsvSetMaxVarsUsed(unsigned int size);
-
-// Init/kill vars as a whole
-void jsvInit();
-void jsvKill();
-void jsvSoftInit(); ///< called when loading from flash
-void jsvSoftKill(); ///< called when saving to flash
 JsVar *jsvFindOrCreateRoot(); ///< Find or create the ROOT variable item - used mainly if recovering from a saved state.
-unsigned int jsvGetMemoryUsage(); ///< Get number of memory records (JsVars) used
-unsigned int jsvGetMemoryTotal(); ///< Get total amount of memory records
-bool jsvIsMemoryFull(); ///< Get whether memory is full or not
-void jsvShowAllocated(); ///< Show what is still allocated, for debugging memory problems
-/// Try and allocate more memory - only works if RESIZABLE_JSVARS is defined
-void jsvSetMemoryTotal(unsigned int jsNewVarCount);
-
-
-// Note that jsvNew* don't REF a variable for you, but the do LOCK it
+// Note that jsvNew* don't REF a variable for you, but they do LOCK it
 JsVar *jsvNewWithFlags(JsVarFlags flags); ///< Create a new variable with the given flags
 JsVar *jsvNewFlatStringOfLength(unsigned int byteLength); ///< Try and create a special flat string
 JsVar *jsvNewFromString(const char *str); ///< Create a new string
@@ -323,12 +307,6 @@ JsVar *jsvNewNativeFunction(void (*ptr)(void), unsigned short argTypes); ///< Cr
 JsVar *jsvNewArrayBufferFromString(JsVar *str, unsigned int lengthOrZero); ///< Create a new ArrayBuffer backed by the given string. If length is not specified, it will be worked out
 
 void *jsvGetNativeFunctionPtr(const JsVar *function); ///< Get the actual pointer from a native function - this may not be the contents of varData.native.ptr
-
-/// Get a reference from a var - SAFE for null vars
-ALWAYS_INLINE JsVarRef jsvGetRef(JsVar *var);
-
-/// SCARY - only to be used for vital stuff like load/save
-ALWAYS_INLINE JsVar *_jsvGetAddressOf(JsVarRef ref);
 
 /// Lock this reference and return a pointer - UNSAFE for null refs
 ALWAYS_INLINE JsVar *jsvLock(JsVarRef ref);
@@ -679,9 +657,6 @@ static ALWAYS_INLINE bool jsvArrayIsEmpty(JsVar *arr) { assert(jsvIsArray(arr));
 
 /** Write debug info for this Var out to the console */
 void jsvTrace(JsVar *var, int indent);
-
-/** Run a garbage collection sweep - return true if things have been freed */
-bool jsvGarbageCollect();
 
 /** Remove whitespace to the right of a string - on MULTIPLE LINES */
 JsVar *jsvStringTrimRight(JsVar *srcString);
