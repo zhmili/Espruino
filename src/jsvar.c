@@ -388,6 +388,9 @@ JsVarRef jsvUnRefRef(JsVarRef ref) {
 }
 
 JsVar *jsvNewFlatStringOfLength(unsigned int byteLength) {
+#ifdef VAR_CACHE
+  return 0;
+#else
   // Work out how many blocks we need. One for the header, plus some for the characters
   size_t blocks = 1 + ((byteLength+sizeof(JsVar)-1) / sizeof(JsVar));
   // Now try and find them
@@ -426,6 +429,7 @@ JsVar *jsvNewFlatStringOfLength(unsigned int byteLength) {
   }
   // can't make it - return undefined
   return 0;
+#endif
 }
 
 JsVar *jsvNewFromString(const char *str) {
@@ -1895,13 +1899,24 @@ JsVar *jsvFindChildFromString(JsVar *parent, const char *name, bool addIfNotFoun
   while (childref) {
     // Don't Lock here, just use GetAddressOf - to try and speed up the finding
     // TODO: We can do this now, but when/if we move to cacheing vars, it'll break
+#ifdef VAR_CACHE
+    JsVar *child = jsvLock(childref);
+#else
     JsVar *child = _jsvGetAddressOf(childref);
+#endif
     if (*(int*)fastCheck==*(int*)child->varData.str && // speedy check of first 4 bytes
         jsvIsStringEqual(child, name)) {
       // found it! unlock parent but leave child locked
+#ifdef VAR_CACHE
+      return child;
+#else
       return jsvLockAgain(child);
+#endif
     }
     childref = jsvGetNextSibling(child);
+#ifdef VAR_CACHE
+    jsvUnLock(child);
+#endif
   }
 
   JsVar *child = 0;

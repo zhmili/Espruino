@@ -18,6 +18,20 @@
 #include "jswrap_json.h"
 #include "jsinteractive.h"
 
+#ifdef VAR_CACHE
+#define CACHE_SIZE 128
+/* If we're using a variable cache, what we have is the
+ * most recently used variables in RAM.  */
+
+JsVar jsVarCache[CACHE_SIZE];
+JsVarRef jsVarRefs[CACHE_SIZE];
+int jsVarAge[CACHE_SIZE];
+int jsVarAgeCounter;
+
+unsigned int jsVarsSize = JSVAR_CACHE_SIZE;
+JsVar variables[JSVAR_CACHE_SIZE];
+
+#else
 /** Basically, JsVars are stored in one big array, so save the need for
  * lots of memory allocation. On Linux, the arrays are in blocks, so that
  * more blocks can be allocated. We can't use realloc on one big block as
@@ -34,6 +48,7 @@ unsigned int jsVarsSize = 0;
 JsVar jsVars[JSVAR_CACHE_SIZE];
 unsigned int jsVarsSize = JSVAR_CACHE_SIZE;
 #endif
+#endif
 
 JsVarRef jsVarFirstEmpty; ///< reference of first unused variable (variables are in a linked list)
 
@@ -45,11 +60,43 @@ JsVarRef jsVarFirstEmpty; ///< reference of first unused variable (variables are
  * This is effectively a Lock without locking! */
 static ALWAYS_INLINE JsVar *jsvGetAddressOf(JsVarRef ref) {
   assert(ref);
+#ifdef VAR_CACHE
+  int i, empty=-1, age=0x7FFFFFFF;
+  for (i=0;i<CACHE_SIZE;i++) {
+    if (jsVarRefs[i] == ref)
+      return &jsVarCache[i];
+    if ((!jsVarRefs[i] || jsvGetLocks(&jsVarCache[i])==0) && jsVarAge[i]<age) {
+      age = jsVarAge[i];
+      empty = i;
+    }
+  }
+  //jsiConsolePrintf("Need to load #%d into cache\n", ref);
+  if (empty<0) {
+    jsiConsolePrintf("Can't find empty location\n");
+    assert(0);
+    return 0;
+  }
+  if (jsVarRefs[empty]) {
+    // TODO: STORE VARIABLE
+    //jsiConsolePrintf("Saving %d -> #%d\n", empty, jsVarRefs[empty]);
+    variables[jsVarRefs[empty]] = jsVarCache[empty];
+  }
+  jsVarAgeCounter++;
+  jsVarAge[empty] = jsVarAgeCounter;
+  // TODO: LOAD VARIABLE
+  //jsiConsolePrintf("Loading location at #%d -> %d\n", ref, empty);
+  jsVarCache[empty] = variables[ref];
+  jsVarRefs[empty] = ref;
+  return &jsVarCache[empty];
+
+
+#else
 #ifdef RESIZABLE_JSVARS
   JsVarRef t = ref-1;
   return &jsVarBlocks[t>>JSVAR_BLOCK_SHIFT][t&(JSVAR_BLOCK_SIZE-1)];
 #else
   return &jsVars[ref-1];
+#endif
 #endif
 }
 
@@ -135,6 +182,14 @@ void jsvInit() {
   jsVarBlocks = malloc(sizeof(JsVar*)); // just 1
   jsVarBlocks[0] = malloc(sizeof(JsVar) * JSVAR_BLOCK_SIZE);
 #endif
+#ifdef VAR_CACHE
+  int i;
+  jsVarAgeCounter = 1;
+  for (i=0;i<CACHE_SIZE;i++) {
+    jsVarRefs[i] = 0;
+    jsVarAge[i] = 0;
+  }
+#endif
 
   jsVarFirstEmpty = jsvInitJsVars(1/*first*/, jsVarsSize);
   jsvSoftInit();
@@ -219,6 +274,9 @@ void jsvShowAllocated() {
 /// Get a reference from a var - SAFE for null vars
 ALWAYS_INLINE JsVarRef jsvGetRef(JsVar *var) {
   if (!var) return 0;
+#ifdef VAR_CACHE
+   return jsVarRefs[var - jsVarCache];
+#else
 #ifdef RESIZABLE_JSVARS
   unsigned int i, c = jsVarsSize>>JSVAR_BLOCK_SHIFT;
   for (i=0;i<c;i++) {
@@ -230,6 +288,7 @@ ALWAYS_INLINE JsVarRef jsvGetRef(JsVar *var) {
   return 0;
 #else
   return (JsVarRef)(1 + (var - jsVars));
+#endif
 #endif
 }
 

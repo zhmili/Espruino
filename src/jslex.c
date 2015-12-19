@@ -42,11 +42,19 @@ static void NO_INLINE jslGetNextCh(JsLex *lex) {
   if (lex->it.charIdx >= lex->it.charsInVar) {
     lex->it.charIdx -= lex->it.charsInVar;
     if (lex->it.var && jsvGetLastChild(lex->it.var)) {
+#ifdef VAR_CACHE
+      jsvUnLock(lex->it.var);
+      lex->it.var = jsvLock(jsvGetLastChild(lex->it.var));
+#else
       lex->it.var = _jsvGetAddressOf(jsvGetLastChild(lex->it.var));
+#endif
       lex->it.ptr = &lex->it.var->varData.str[0];
       lex->it.varIndex += lex->it.charsInVar;
       lex->it.charsInVar = jsvGetCharactersInVar(lex->it.var);
     } else {
+#ifdef VAR_CACHE
+      jsvUnLock(lex->it.var);
+#endif
       lex->it.var = 0;
       lex->it.ptr = 0;
       lex->it.varIndex += lex->it.charsInVar;
@@ -552,13 +560,17 @@ void jslInit(JsLex *lex, JsVar *var) {
   lex->lineNumberOffset = 0;
   // set up iterator
   jsvStringIteratorNew(&lex->it, lex->sourceVar, 0);
+#ifndef VAR_CACHE
   jsvUnLock(lex->it.var); // see jslGetNextCh
+#endif
   jslPreload(lex);
 }
 
 void jslKill(JsLex *lex) {
   lex->tk = LEX_EOF; // safety ;)
+#ifndef VAR_CACHE
   if (lex->it.var) jsvLockAgain(lex->it.var); // see jslGetNextCh
+#endif
   jsvStringIteratorFree(&lex->it);
   if (lex->tokenValue) {
     jsvUnLock(lex->tokenValue);
@@ -570,20 +582,28 @@ void jslKill(JsLex *lex) {
 }
 
 void jslSeekTo(JsLex *lex, size_t seekToChar) {
+#ifndef VAR_CACHE
   if (lex->it.var) jsvLockAgain(lex->it.var); // see jslGetNextCh
+#endif
   jsvStringIteratorFree(&lex->it);
   jsvStringIteratorNew(&lex->it, lex->sourceVar, seekToChar);
+#ifndef VAR_CACHE
   jsvUnLock(lex->it.var); // see jslGetNextCh
+#endif
   lex->tokenStart.it.var = 0;
   lex->tokenStart.currCh = 0;
   jslPreload(lex);
 }
 
 void jslSeekToP(JsLex *lex, JslCharPos *seekToChar) {
+#ifndef VAR_CACHE
   if (lex->it.var) jsvLockAgain(lex->it.var); // see jslGetNextCh
+#endif
   jsvStringIteratorFree(&lex->it);
   lex->it = jsvStringIteratorClone(&seekToChar->it);
+#ifndef VAR_CACHE
   jsvUnLock(lex->it.var); // see jslGetNextCh
+#endif
   lex->currCh = seekToChar->currCh;
   lex->tokenStart.it.var = 0;
   lex->tokenStart.currCh = 0;
