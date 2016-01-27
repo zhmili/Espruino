@@ -21,3 +21,12 @@ bool jsserialPopulateSerialInfo(JshUSARTInfo *inf, JsVar *baud,  JsVar *options)
 
 // Get the correct Serial send function (and the data to send to it)
 bool jsserialGetSendFunction(JsVar *serialDevice, serial_sender *serialSend, serial_sender_data *serialSendData) ;
+
+void jsserialEventCallbackInit(JshUSARTInfo *inf);
+void jsserialEventCallbackIdle();
+
+// This is used with jshSetEventCallback to allow Serial data to be received in software
+void jsserialEventCallback(bool state);
+
+
+

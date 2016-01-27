@@ -14,6 +14,7 @@
 #include "jsserial.h"
 #include "jsinteractive.h"
 #include "jstimer.h"
+#include "jswrap_espruino.h"
 
 
 
@@ -173,4 +174,74 @@ bool jsserialGetSendFunction(JsVar *serialDevice, serial_sender *serialSend, ser
     return true;
   }
   return false;
+}
+
+
+typedef struct {
+  JsSysTime lastTime;
+  int baudRate;
+  /** We shift left for each bit, and always reset this with a '1' in it,
+   * so that we can use the variable to mark how many bit we've received
+   * as well as the data itself.
+   */
+  int bits;
+  int bitMax;
+} SerialEventCallbackData;
+
+SerialEventCallbackData serialEventData;
+
+void jsserialEventCallbackInit(JshUSARTInfo *inf) {
+  SerialEventCallbackData *data = &serialEventData;
+  data->lastTime = jshGetSystemTime();
+  data->baudRate = inf->baudRate;
+  data->bits = 1;
+  data->bitMax = 1 << (1+inf->bytesize+inf->stopbits);
+  if (inf->parity) data->bitMax<<=1;
+}
+
+void jsserialEventCallbackIdle() {
+  SerialEventCallbackData *data = &serialEventData;
+  if (data->bits==1) return;
+  JsSysTime time = jshGetSystemTime();
+  JsSysTime timeDiff = time - data->lastTime;
+  int bitCnt = (int)((jshGetMillisecondsFromTime(timeDiff) * data->baudRate / 1000)+0.5);
+  if (bitCnt>2) {
+    if ((data->bits<<bitCnt) >= data->bitMax) {
+      while (data->bits < data->bitMax)
+        data->bits=(data->bits<<1)|1;
+      int ch = jswrap_espruino_reverseByte((data->bits>>1)&255);
+      /*char buf[20];
+      itostr(data->bits, buf, 2);
+      jsiConsolePrintf("=]%d %s %d\n", data->bits, buf, ch);*/
+      jshPushIOCharEvent(EV_SERIAL6, (char)ch);
+      data->bits = 1;
+    }
+  }
+}
+
+// This is used with jshSetEventCallback to allow Serial data to be received in software
+void jsserialEventCallback(bool state) {
+  SerialEventCallbackData *data = &serialEventData;
+  // work out time difference
+  JsSysTime time = jshGetSystemTime();
+  JsSysTime timeDiff = time - data->lastTime;
+  data->lastTime = time;
+  int bitCnt = (int)((jshGetMillisecondsFromTime(timeDiff) * data->baudRate / 1000)+0.5);
+  if (bitCnt<0 || bitCnt>=10) {
+    // We're starting again - reset
+    bitCnt = 0;
+    if (data->bits != 1)
+      while (data->bits < data->bitMax)
+        data->bits=(data->bits<<1)|1;
+  }
+  data->bits <<= bitCnt;
+  if (!state) data->bits |= (1<<bitCnt)-1; // add 1s if we need to
+  if (data->bits >= data->bitMax) {
+    int ch = jswrap_espruino_reverseByte((data->bits>>1)&255);
+    /*char buf[20];
+    itostr(data->bits, buf, 2);
+    jsiConsolePrintf("]]%d %s %d\n", data->bits, buf, ch);*/
+    jshPushIOCharEvent(EV_SERIAL6, (char)ch);
+    data->bits = 1;
+  }
 }

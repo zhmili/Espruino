@@ -227,11 +227,30 @@ void jswrap_serial_setup(JsVar *parent, JsVar *baud, JsVar *options) {
       jshPinSetState(inf.pinTX,  JSHPINSTATE_GPIO_OUT);
       jshPinOutput(inf.pinTX, 1);
     }
+    if (inf.pinRX != PIN_UNDEFINED) {
+      jsserialEventCallbackInit(&inf);
+      jshPinSetState(inf.pinRX,  JSHPINSTATE_GPIO_IN_PULLUP);
+      IOEventFlags exti = jshPinWatch(inf.pinRX, true);
+      if (exti) {
+        jshSetEventCallback(exti, jsserialEventCallback);
+      } else {
+        jsWarn("Unable to watch pin %p, no Software Serial RX\n", inf.pinRX);
+      }
+    }
     if (inf.pinCK != PIN_UNDEFINED)
       jsWarn("Software Serial CK not implemented yet\n");
   }
 }
 
+
+/*JSON{
+  "type" : "idle",
+  "generate" : "jswrap_serial_idle"
+}*/
+bool jswrap_serial_idle() {
+  jsserialEventCallbackIdle();
+  return false;
+}
 
 void _jswrap_serial_print(JsVar *parent, JsVar *arg, bool isPrint, bool newLine) {
   serial_sender serialSend;
