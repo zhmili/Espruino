@@ -16,6 +16,7 @@
 #include "jswrap_serial.h"
 #include "jsdevices.h"
 #include "jsinteractive.h"
+#include "jsserial.h"
 
 /*JSON{
   "type" : "class",
@@ -25,6 +26,19 @@ This class allows use of the built-in USARTs
 
 Methods may be called on the USB, Serial1, Serial2, Serial3, Serial4, Serial5 and Serial6 objects. While different processors provide different numbers of USARTs, you can always rely on at least Serial1 and Serial2
  */
+/*JSON{
+  "type" : "constructor",
+  "class" : "Serial",
+  "name" : "Serial",
+  "generate" : "jswrap_serial_constructor"
+}
+Create a software Serial port. This has limited functionality (only low baud rates), but it can work on any pins.
+
+Use `Serial.setup` to configure this port.
+ */
+JsVar *jswrap_serial_constructor() {
+  return jsvNewWithFlags(JSV_OBJECT);
+}
 /*JSON{
   "type" : "event",
   "class" : "Serial",
@@ -177,79 +191,25 @@ If not specified in options, the default pins are used (usually the lowest numbe
  */
 void jswrap_serial_setup(JsVar *parent, JsVar *baud, JsVar *options) {
   IOEventFlags device = jsiGetDeviceFromClass(parent);
-  if (!DEVICE_IS_USART(device)) return;
-
   JshUSARTInfo inf;
-  jshUSARTInitInfo(&inf);
 
   if (jsvIsUndefined(options)) {
     options = jsvObjectGetChild(parent, DEVICE_OPTIONS_NAME, 0);
   } else
     jsvLockAgain(options);
 
-  JsVar *parity = 0;
-  JsVar *flow = 0;
-  jsvConfigObject configs[] = {
-      {"rx", JSV_PIN, &inf.pinRX},
-      {"tx", JSV_PIN, &inf.pinTX},
-      {"ck", JSV_PIN, &inf.pinCK},
-      {"bytesize", JSV_INTEGER, &inf.bytesize},
-      {"stopbits", JSV_INTEGER, &inf.stopbits},
-      {"parity", JSV_OBJECT /* a variable */, &parity},
-      {"flow", JSV_OBJECT /* a variable */, &flow},
-  };
-
-
-
-  if (!jsvIsUndefined(baud)) {
-    int b = (int)jsvGetInteger(baud);
-    if (b<=100 || b > 10000000)
-      jsExceptionHere(JSET_ERROR, "Invalid baud rate specified");
-    else
-      inf.baudRate = b;
-  }
-
-  bool ok = true;
-  if (jsvReadConfigObject(options, configs, sizeof(configs) / sizeof(jsvConfigObject))) {
-    // sort out parity
-    inf.parity = 0;
-    if(jsvIsString(parity)) {
-      if (jsvIsStringEqual(parity, "o") || jsvIsStringEqual(parity, "odd"))
-        inf.parity = 1;
-      else if (jsvIsStringEqual(parity, "e") || jsvIsStringEqual(parity, "even"))
-        inf.parity = 2;
-    } else if (jsvIsInt(parity)) {
-      inf.parity = (unsigned char)jsvGetInteger(parity);
-    }
-    if (inf.parity>2) {
-      jsExceptionHere(JSET_ERROR, "Invalid parity %d", inf.parity);
-      ok = false;
-    }
-
-    if (ok) {
-      if (jsvIsUndefined(flow) || jsvIsNull(flow) || jsvIsStringEqual(flow, "none"))
-        inf.xOnXOff = false;
-      else if (jsvIsStringEqual(flow, "xon"))
-        inf.xOnXOff = true;
-      else {
-        jsExceptionHere(JSET_ERROR, "Invalid flow control: %q", flow);
-        ok = false;
-      }
-    }
+  bool ok = jsserialPopulateSerialInfo(&inf, baud, options);
 
 #ifdef LINUX
-    if (ok && jsvIsObject(options))
-      jsvObjectSetChildAndUnLock(parent, "path", jsvObjectGetChild(options, "path", 0));
+  if (ok && jsvIsObject(options))
+    jsvObjectSetChildAndUnLock(parent, "path", jsvObjectGetChild(options, "path", 0));
 #endif
-  }
-  jsvUnLock(parity);
-  jsvUnLock(flow);
+
   if (!ok) {
     jsvUnLock(options);
     return;
   }
 
-  jshUSARTSetup(device, &inf);
   // Set baud rate in object, so we can initialise it on startup
   jsvObjectSetChildAndUnLock(parent, USART_BAUDRATE_NAME, jsvNewFromInteger(inf.baudRate));
   // Do the same for options
@@ -257,24 +217,34 @@ void jswrap_serial_setup(JsVar *parent, JsVar *baud, JsVar *options) {
     jsvObjectSetChildAndUnLock(parent, DEVICE_OPTIONS_NAME, options);
   else
     jsvRemoveNamedChild(parent, DEVICE_OPTIONS_NAME);
+
+  if (DEVICE_IS_USART(device)) {
+    // Hardware
+    jshUSARTSetup(device, &inf);
+  } else if (device == EV_NONE) {
+    // Software
+    if (inf.pinTX != PIN_UNDEFINED) {
+      jshPinSetState(inf.pinTX,  JSHPINSTATE_GPIO_OUT);
+      jshPinOutput(inf.pinTX, 1);
+    }
+    if (inf.pinCK != PIN_UNDEFINED)
+      jsWarn("Software Serial CK not implemented yet\n");
+  }
 }
 
 
-static void _jswrap_serial_print_cb(int data, void *userData) {
-  IOEventFlags device = *(IOEventFlags*)userData;
-  jshTransmit(device, (unsigned char)data);
-}
 void _jswrap_serial_print(JsVar *parent, JsVar *arg, bool isPrint, bool newLine) {
-  NOT_USED(parent);
-  IOEventFlags device = jsiGetDeviceFromClass(parent);
-  if (!DEVICE_IS_USART(device)) return;
+  serial_sender serialSend;
+  serial_sender_data serialSendData;
+  if (!jsserialGetSendFunction(parent, &serialSend, &serialSendData))
+    return;
 
   if (isPrint) arg = jsvAsString(arg, false);
-  jsvIterateCallback(arg, _jswrap_serial_print_cb, (void*)&device);
+  jsvIterateCallback(arg, (void (*)(int,  void *))serialSend, (void*)&serialSendData);
   if (isPrint) jsvUnLock(arg);
   if (newLine) {
-    _jswrap_serial_print_cb((unsigned char)'\r', (void*)&device);
-    _jswrap_serial_print_cb((unsigned char)'\n', (void*)&device);
+    serialSend((unsigned char)'\r', &serialSendData);
+    serialSend((unsigned char)'\n', &serialSendData);
   }
 }
 
@@ -329,6 +299,7 @@ void jswrap_serial_write(JsVar *parent, JsVar *args) {
 
 /*JSON{
   "type" : "method",
+  "ifndef" : "SAVE_ON_FLASH",
   "class" : "Serial",
   "name" : "onData",
   "generate" : "jswrap_serial_onData",

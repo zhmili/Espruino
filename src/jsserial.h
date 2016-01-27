@@ -8,14 +8,16 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  *
  * ----------------------------------------------------------------------------
- * JavaScript Serial Port Functions
+ * Software Serial
  * ----------------------------------------------------------------------------
  */
-#include "jsvar.h"
 
-JsVar *jswrap_serial_constructor();
-void jswrap_serial_setup(JsVar *parent, JsVar *baud, JsVar *options);
-void jswrap_serial_print(JsVar *parent, JsVar *str);
-void jswrap_serial_println(JsVar *parent, JsVar *str);
-void jswrap_serial_write(JsVar *parent, JsVar *data);
-void jswrap_serial_onData(JsVar *parent, JsVar *funcVar);
+#include "jshardware.h"
+
+typedef JshUSARTInfo serial_sender_data; // the larger of JshSPIInfo or IOEventFlags
+typedef void (*serial_sender)(unsigned char data, serial_sender_data *info);
+
+bool jsserialPopulateSerialInfo(JshUSARTInfo *inf, JsVar *baud,  JsVar *options);
+
+// Get the correct Serial send function (and the data to send to it)
+bool jsserialGetSendFunction(JsVar *serialDevice, serial_sender *serialSend, serial_sender_data *serialSendData) ;

@@ -57,6 +57,15 @@ typedef enum {
 #ifdef USE_TELNET
   EV_TELNET,
 #endif
+  EV_CUSTOM1,
+  EV_CUSTOM2,
+  EV_CUSTOM3,
+  EV_CUSTOM4,
+  EV_CUSTOM5,
+  EV_CUSTOM6,
+  EV_CUSTOM7,
+  EV_CUSTOM8,
+  EV_CUSTOM_MAX = EV_CUSTOM8,
   EV_SERIAL1,
   EV_SERIAL2,
   EV_SERIAL3,
@@ -80,6 +89,7 @@ typedef enum {
   EV_I2C3,
   EV_I2C_MAX = EV_I2C3,
 
+
   EV_DEVICE_MAX = EV_SERIAL_STATUS_MAX,
   // EV_DEVICE_MAX should not be >64 - see DEVICE_INITIALISED_FLAGS
   EV_TYPE_MASK = NEXT_POWER_2(EV_DEVICE_MAX) - 1,
@@ -97,8 +107,10 @@ typedef enum {
 
 
 
+// If device is a serial device (but included Telnet/etc)
+#define DEVICE_IS_SERIAL(X) (((X)>=EV_SERIAL_START) && ((X)<=EV_SERIAL_MAX))
 // Return true if the device is a USART
-#define DEVICE_IS_USART(X) (((X)>=EV_SERIAL_START) && ((X)<=EV_SERIAL_MAX))
+#define DEVICE_IS_USART(X) (((X)>=EV_SERIAL1) && ((X)<=EV_SERIAL_MAX))
 #define DEVICE_IS_USART_STATUS(X) (((X)>=EV_SERIAL1_STATUS) && ((X)<=EV_SERIAL_STATUS_MAX))
 
 // Return true if the device is an SPI.

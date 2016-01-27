@@ -54,8 +54,8 @@ typedef enum {
   SDS_XOFF_SENT = 4, // sending XON clears this
   SDS_FLOW_CONTROL_XON_XOFF = 8, // flow control enabled
 } PACKED_FLAGS JshSerialDeviceState;
-JshSerialDeviceState jshSerialDeviceStates[EV_SERIAL1+USART_COUNT-EV_SERIAL_START];
-#define TO_SERIAL_DEVICE_STATE(X) ((X)-EV_SERIAL_START)
+JshSerialDeviceState jshSerialDeviceStates[USART_COUNT];
+#define TO_SERIAL_DEVICE_STATE(X) ((X)-EV_SERIAL1)
 
 // ----------------------------------------------------------------------------
 //                                                              IO EVENT BUFFER

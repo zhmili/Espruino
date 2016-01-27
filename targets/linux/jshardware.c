@@ -609,7 +609,7 @@ bool jshIsEventForPin(IOEvent *event, Pin pin) {
 }
 
 void jshUSARTSetup(IOEventFlags device, JshUSARTInfo *inf) {
-  assert(DEVICE_IS_USART(device));
+  assert(DEVICE_IS_SERIAL(device));
   if (ioDevices[device]) close(ioDevices[device]);
   ioDevices[device] = 0;
   char path[256];
@@ -695,7 +695,7 @@ void jshUSARTSetup(IOEventFlags device, JshUSARTInfo *inf) {
 /** Kick a device into action (if required). For instance we may need
  * to set up interrupts */
 void jshUSARTKick(IOEventFlags device) {
-  assert(DEVICE_IS_USART(device));
+  assert(DEVICE_IS_SERIAL(device));
   // all done by the idle loop
 }
 
