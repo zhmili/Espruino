@@ -36,8 +36,7 @@ JsVar *callFn(char* name, int argCount, JsVar **argPtr) {
     r = jspeFunctionCall(child, 0, netObj, false, argCount, argPtr);
     execInfo = oldExecInfo;
   }
-  jsvUnLock(child);
-  jsvUnLock(netObj);
+  jsvUnLock2(child, netObj);
   return r;
 }
 
@@ -48,7 +47,7 @@ void net_js_gethostbyname(JsNetwork *net, char * hostName, uint32_t* out_ip_addr
   NOT_USED(net);
   // hacky - save the last checked name so we can put it straight into the request
   *out_ip_addr = 0xFFFFFFFF;
-  jsvUnLock(jsvObjectSetChild(execInfo.hiddenRoot, JSNET_DNS_NAME, jsvNewFromString(hostName)));
+  jsvObjectSetChildAndUnLock(execInfo.hiddenRoot, JSNET_DNS_NAME, jsvNewFromString(hostName));
 }
 
 /// Called on idle. Do any checks required for this device
@@ -90,8 +89,7 @@ void net_js_closesocket(JsNetwork *net, int sckt) {
   JsVar *args[1] = {
       jsvNewFromInteger(sckt)
   };
-  jsvUnLock(callFn("close", 1, args));
-  jsvUnLock(args[0]);
+  jsvUnLock2(callFn("close", 1, args), args[0]);
 }
 
 /// If the given server socket can accept a connection, return it (or return < 0)
@@ -103,8 +101,7 @@ int net_js_accept(JsNetwork *net, int serverSckt) {
   };
 
   int sckt = jsvGetIntegerAndUnLock(callFn("accept", 1, args));
-  jsvUnLock(args[0]);
-  jsvUnLock(netObj);
+  jsvUnLock2(args[0], netObj);
   return sckt;
 }
 
@@ -120,8 +117,9 @@ int net_js_recv(JsNetwork *net, int sckt, void *buf, size_t len) {
   int r = -1; // fail
   if (jsvIsString(res)) {
     r = (int)jsvGetStringLength(res);
-    if (r>(int)len) r=(int)len;
+    if (r>(int)len) { r=(int)len; assert(0); }
     jsvGetStringChars(res, 0, (char*)buf, (size_t)r);
+    // FIXME: jsvGetStringChars adds a 0 - does that actually write past the end of the array, or clip the data we get?
   }
   jsvUnLock(res);
   return r;
@@ -151,5 +149,6 @@ void netSetCallbacks_js(JsNetwork *net) {
   net->gethostbyname = net_js_gethostbyname;
   net->recv = net_js_recv;
   net->send = net_js_send;
+  net->chunkSize = 536;
 }
 

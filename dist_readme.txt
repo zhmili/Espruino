@@ -27,9 +27,6 @@ espruino_#v##_espruino_1r3_wiznet.bin
      Each image is for a different type of networking device.
      If you don't want a network device, it doesn't matter which you choose.
 
-espruino_#v##_espruino_1r1.bin  
-   - The firmware image for older, rev 1v1 and 1v2 boards
-
 espruino_#v##_hystm32_24_ve.bin 
    - 'HY'STM32F103VET6 ARM with 2.4" LCD display
      This is available from eBay
@@ -58,14 +55,24 @@ espruino_#v##_stm32f4discovery.bin
    - STM32F4DISCOVERY board
 
 espruino_#v##_nucleof401re.bin
-   - NUCLEO-F401RE board
+   - ST NUCLEO-F401RE board
 
+espruino_#v##_nucleof411re.bin
+   - ST NUCLEO-F411RE board
 
 espruino_#v##_raspberrypi
    - Raspberry Pi executable (just copy it to the device and run it)
    NOTE: There is GPIO support (which requires you to run Espruino as root)
    however there is no Serial, SPI, OneWire or I2C support at the moment so
    you're pretty limited!
+
+espruino_esp8266_user*.bin
+   - ESP8266 port - see http://www.espruino.com/EspruinoESP8266 for more info
+
+espruino_#v##_microbit.hex
+   - Espruino for the BBC micro:bit - just copy this file onto the
+   flash drive that appears when you plug the micro:bit in.
+
 
 For information on devices, and on how to flash these binary files on to 
 each device, please see our website, http://www.espruino.com

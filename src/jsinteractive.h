@@ -42,16 +42,15 @@ bool jsiFreeMoreMemory();
 bool jsiHasTimers(); // are there timers still left to run?
 bool jsiIsWatchingPin(Pin pin); // are there any watches for the given pin?
 
-
-void jsiHandleIOEventForUSART(JsVar *usartClass, IOEvent *event); ///< Called from idle loop
-
 /// Queue a function, string, or array (of funcs/strings) to be executed next time around the idle loop
 void jsiQueueEvents(JsVar *object, JsVar *callback, JsVar **args, int argCount);
 /// Return true if the object has callbacks...
 bool jsiObjectHasCallbacks(JsVar *object, const char *callbackName);
 /// Queue up callbacks for other things (touchscreen? network?)
 void jsiQueueObjectCallbacks(JsVar *object, const char *callbackName, JsVar **args, int argCount);
-/// Execute the given function/string/array of functions and return true on success, false on failure (error)
+/// Execute callbacks straight away (like jsiQueueObjectCallbacks, but without queueing)
+void jsiExecuteObjectCallbacks(JsVar *object, const char *callbackName, JsVar **args, int argCount);
+/// Execute the given function/string/array of functions and return true on success, false on failure (break during execution)
 bool jsiExecuteEventCallback(JsVar *thisVar, JsVar *callbackVar, unsigned int argCount, JsVar **argPtr);
 /// Same as above, but with a JsVarArray (this calls jsiExecuteEventCallback, so use jsiExecuteEventCallback where possible)
 bool jsiExecuteEventCallbackArgsArray(JsVar *thisVar, JsVar *callbackVar, JsVar *argsArray);
@@ -66,16 +65,31 @@ void jsiSetConsoleDevice(IOEventFlags device);
 IOEventFlags jsiGetConsoleDevice();
 /// Transmit a byte
 void jsiConsolePrintChar(char data);
-/// Transmit a string
-void jsiConsolePrint(const char *str);
+/// Transmit a string (may be any string)
+void jsiConsolePrintString(const char *str);
+#ifndef FLASH_STR
+#define jsiConsolePrint jsiConsolePrintString
 /// Write the formatted string to the console (see vcbprintf)
 void jsiConsolePrintf(const char *fmt, ...);
+#else
+/// Write the formatted string to the console (see vcbprintf), but place the format string into
+// into flash
+#define jsiConsolePrintf(fmt, ...) do { \
+    FLASH_STR(flash_str, fmt); \
+    jsiConsolePrintf_int(flash_str, ##__VA_ARGS__); \
+  } while(0)
+void jsiConsolePrintf_int(const char *fmt, ...);
+/// Transmit a string (must be a literal string)
+#define jsiConsolePrint(str) do { \
+    FLASH_STR(flash_str, str); \
+    jsiConsolePrintString_int(flash_str); \
+} while(0)
+void jsiConsolePrintString_int(const char *str);
+#endif
 /// Print the contents of a string var - directly
 void jsiConsolePrintStringVar(JsVar *v);
 /// Transmit a position in the lexer (for reporting errors)
 void jsiConsolePrintPosition(struct JsLex *lex, size_t tokenPos);
-/// Transmit the current line, along with a marker of where the error was (for reporting errors)
-void jsiConsolePrintTokenLineMarker(struct JsLex *lex, size_t tokenPos);
 /// If the input line was shown in the console, remove it
 void jsiConsoleRemoveInputLine();
 /// Change what is in the inputline into something else (and update the console)
@@ -102,15 +116,10 @@ void jsiSetSleep(JsiSleepType isSleep);
 
 
 // for jswrap_interactive/io.c ----------------------------------------------------
-typedef enum {
- TODO_NOTHING = 0,
- TODO_FLASH_SAVE = 1,
- TODO_FLASH_LOAD = 2,
- TODO_RESET = 4,
-} TODOFlags;
-#define USART_CALLBACK_NAME "#ondata"
+#define USART_CALLBACK_NAME JS_EVENT_PREFIX"data"
 #define USART_BAUDRATE_NAME "_baudrate"
 #define DEVICE_OPTIONS_NAME "_options"
+#define INIT_CALLBACK_NAME JS_EVENT_PREFIX"init" ///< Callback for `E.on('init'`
 
 typedef enum {
   JSIS_NONE,
@@ -118,6 +127,15 @@ typedef enum {
   JSIS_ECHO_OFF_FOR_LINE = 2,
   JSIS_ALLOW_DEEP_SLEEP = 4, // can we go into proper deep sleep?
   JSIS_TIMERS_CHANGED = 8,
+#ifdef USE_DEBUGGER
+  JSIS_IN_DEBUGGER = 16, // We're inside the debug loop
+  JSIS_EXIT_DEBUGGER = 32, // we've been asked to exit the debug loop
+#endif
+  JSIS_TODO_FLASH_SAVE = 64, // save to flash
+  JSIS_TODO_FLASH_LOAD = 128, // load from flash
+  JSIS_TODO_RESET = 256, // reset the board, don't load anything
+  JSIS_TODO_MASK = JSIS_TODO_FLASH_SAVE|JSIS_TODO_FLASH_LOAD|JSIS_TODO_RESET,
+
 
   JSIS_ECHO_OFF_MASK = JSIS_ECHO_OFF|JSIS_ECHO_OFF_FOR_LINE
 } PACKED_FLAGS JsiStatus;
@@ -129,8 +147,7 @@ extern Pin pinBusyIndicator;
 extern Pin pinSleepIndicator;
 extern JsSysTime jsiLastIdleTime; ///< The last time we went around the idle loop - use this for timers
 
-void jsiDumpState();
-void jsiSetTodo(TODOFlags newTodo);
+void jsiDumpState(vcbprintf_callback user_callback, void *user_data);
 #define TIMER_MIN_INTERVAL 0.1 // in milliseconds
 extern JsVarRef timerArray; // Linked List of timers to check and run
 extern JsVarRef watchArray; // Linked List of input watches to check and run
@@ -138,6 +155,10 @@ extern JsVarRef watchArray; // Linked List of input watches to check and run
 extern JsVarInt jsiTimerAdd(JsVar *timerPtr);
 extern void jsiTimersChanged(); // Flag timers changed so we can skip out of the loop if needed
 // end for jswrap_interactive/io.c ------------------------------------------------
+
+#ifdef USE_DEBUGGER
+extern void jsiDebuggerLoop(); ///< Enter the debugger loop
+#endif
 
 
 #endif /* JSINTERACTIVE_H_ */

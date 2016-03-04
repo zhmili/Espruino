@@ -83,16 +83,21 @@ if "check_output" not in dir( subprocess ):
 #
 
 
-def get_jsondata(is_for_document, parseArgs = True):
+def get_jsondata(is_for_document, parseArgs = True, board = False):
         scriptdir = os.path.dirname	(os.path.realpath(__file__))
-        print "Script location "+scriptdir
+        print("Script location "+scriptdir)
         os.chdir(scriptdir+"/..")
 
         jswraps = []
         defines = []
 
+        if board and ("build" in board.info)  and ("defines" in board.info["build"]):
+          for i in board.info["build"]["defines"]:
+            print("Got define from board: " + i);
+            defines.append(i)
+
         if parseArgs and len(sys.argv)>1:
-          print "Using files from command line"
+          print("Using files from command line")
           for i in range(1,len(sys.argv)):
             arg = sys.argv[i]
             if arg[0]=="-":
@@ -100,23 +105,23 @@ def get_jsondata(is_for_document, parseArgs = True):
                 defines.append(arg[2:])
               elif arg[1]=="B": 
                 board = importlib.import_module(arg[2:])
-                if "usart" in board.chip: defines.append("USARTS="+str(board.chip["usart"]));
-                if "spi" in board.chip: defines.append("SPIS="+str(board.chip["spi"]));
-                if "i2c" in board.chip: defines.append("I2CS="+str(board.chip["i2c"]));
+                if "usart" in board.chip: defines.append("USART_COUNT="+str(board.chip["usart"]));
+                if "spi" in board.chip: defines.append("SPI_COUNT="+str(board.chip["spi"]));
+                if "i2c" in board.chip: defines.append("I2C_COUNT="+str(board.chip["i2c"]));
                 if "USB" in board.devices: defines.append("defined(USB)=True"); 
                 else: defines.append("defined(USB)=False");
               else:
-                print "Unknown command-line option"
+                print("Unknown command-line option")
                 exit(1)
             else:
               jswraps.append(arg)
         else:
-          print "Scanning for jswrap.c files"
+          print("Scanning for jswrap.c files")
           jswraps = subprocess.check_output(["find", ".", "-name", "jswrap*.c"]).strip().split("\n")
 
         if len(defines)>1:
-          print "Got #DEFINES:"
-          for d in defines: print "   "+d
+          print("Got #DEFINES:")
+          for d in defines: print("   "+d)
 
         jsondatas = []
         for jswrap in jswraps:
@@ -124,11 +129,11 @@ def get_jsondata(is_for_document, parseArgs = True):
           if jswrap.startswith("./archives/"): continue
 
           # now scan
-          print "Scanning "+jswrap
+          print("Scanning "+jswrap)
           code = open(jswrap, "r").read()
 
           if is_for_document and "DO_NOT_INCLUDE_IN_DOCS" in code: 
-            print "FOUND 'DO_NOT_INCLUDE_IN_DOCS' IN FILE "+jswrap
+            print("FOUND 'DO_NOT_INCLUDE_IN_DOCS' IN FILE "+jswrap)
             continue
 
           for comment in re.findall(r"/\*JSON.*?\*/", code, re.VERBOSE | re.MULTILINE | re.DOTALL):
@@ -138,7 +143,7 @@ def get_jsondata(is_for_document, parseArgs = True):
             endOfJson = comment.find("\n}")+2;
             jsonstring = comment[0:endOfJson];
             description =  comment[endOfJson:].strip();
-#            print "Parsing "+jsonstring
+#            print("Parsing "+jsonstring)
             try:
               jsondata = json.loads(jsonstring)
               if len(description): jsondata["description"] = description;
@@ -150,10 +155,10 @@ def get_jsondata(is_for_document, parseArgs = True):
               drop = False
               if not is_for_document:
                 if ("ifndef" in jsondata) and (jsondata["ifndef"] in defines):
-                  print dropped_prefix+" because of #ifndef "+jsondata["ifndef"]
+                  print(dropped_prefix+" because of #ifndef "+jsondata["ifndef"])
                   drop = True
                 if ("ifdef" in jsondata) and not (jsondata["ifdef"] in defines):
-                  print dropped_prefix+" because of #ifdef "+jsondata["ifdef"]
+                  print(dropped_prefix+" because of #ifdef "+jsondata["ifdef"])
                   drop = True
                 if ("#if" in jsondata):
                   expr = jsondata["#if"]
@@ -165,10 +170,10 @@ def get_jsondata(is_for_document, parseArgs = True):
                   try: 
                     r = eval(expr)
                   except:
-                    print "WARNING: error evaluating '"+expr+"' - from '"+jsondata["#if"]+"'"
+                    print("WARNING: error evaluating '"+expr+"' - from '"+jsondata["#if"]+"'")
                     r = True
                   if not r:
-                    print dropped_prefix+" because of #if "+jsondata["#if"]+ " -> "+expr
+                    print(dropped_prefix+" because of #if "+jsondata["#if"]+ " -> "+expr)
                     drop = True
               if not drop:
                 jsondatas.append(jsondata)
@@ -178,7 +183,7 @@ def get_jsondata(is_for_document, parseArgs = True):
             except:
               sys.stderr.write( "JSON PARSE FAILED for " + jsonstring + " - "+str(sys.exc_info()[0]) + "\n" )
               exit(1)
-        print "Scanning finished."
+        print("Scanning finished.")
         return jsondatas
 
 # Takes the data from get_jsondata and restructures it in prepartion for output as JS
@@ -304,26 +309,39 @@ def get_ifdef_description(d):
   if d=="SAVE_ON_FLASH": return "devices with low flash memory"
   if d=="STM32F1": return "STM32F1 devices (including Espruino Board)"
   if d=="USE_LCD_SDL": return "Linux with SDL support compiled in"
+  if d=="USE_TLS": return "devices with TLS and SSL support (Espruino Pico only)"
   if d=="RELEASE": return "release builds"
   if d=="LINUX": return "Linux-based builds"
-  print "WARNING: Unknown ifdef '"+d+"' in common.get_ifdef_description"
+  if d=="USE_USB_HID": return "devices that support USB HID (Espruino Espruino Pico)"
+  print("WARNING: Unknown ifdef '"+d+"' in common.get_ifdef_description")
   return d
 
 def get_script_dir():
         return os.path.dirname(os.path.realpath(__file__))
 
 def get_version():
+        # Warning: the same release label derivation is also in the Makefile
         scriptdir = get_script_dir()
         jsutils = scriptdir+"/../src/jsutils.h"
         version = re.compile("^.*JS_VERSION.*\"(.*)\"");
-        latest_release = subprocess.check_output('git tag | grep RELEASE_ | sort | tail -1', shell=True).strip()
-        commits_since_release = subprocess.check_output('git log --oneline '+latest_release+'..HEAD | wc -l', shell=True).strip()
+        alt_release = os.getenv("ALT_RELEASE")
+        if alt_release == None:
+          # Default release labeling based on commits since last release tag
+          latest_release = subprocess.check_output('git tag | grep RELEASE_ | sort | tail -1', shell=True).strip()
+          commits_since_release = subprocess.check_output('git log --oneline '+latest_release.decode("utf-8")+'..HEAD | wc -l', shell=True).decode("utf-8").strip()
+        else:
+          # Alternate release labeling with fork name (in ALT_RELEASE env var) plus branch
+          # name plus commit SHA
+          sha = subprocess.check_output('git rev-parse --short HEAD', shell=True).strip()
+          branch = subprocess.check_output('git name-rev --name-only HEAD', shell=True).strip()
+          commits_since_release = alt_release + '_' + branch + '_' + sha
         for line in open(jsutils):
             match = version.search(line);
             if (match != None):
                 v = match.group(1);
-                if commits_since_release==0: return v
+                if commits_since_release=="0": return v
                 else: return v+"."+commits_since_release
+        return "UNKNOWN"
                
 
 def get_name_or_space(jsondata):

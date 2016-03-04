@@ -32,14 +32,14 @@ import pinutils;
 # -----------------------------------------------------------------------------------------
 
 # Now scan AF file
-print "Script location "+scriptdir
+print("Script location "+scriptdir)
 if len(sys.argv)!=2:
-  print "ERROR, USAGE: build_board_json.py BOARD_NAME"
+  print("ERROR, USAGE: build_board_json.py BOARD_NAME")
   exit(1)
 boardname = sys.argv[1]
 jsonFilename = "boards/"+boardname+".json"
-print "JSON_FILENAME "+jsonFilename
-print "BOARD "+boardname
+print("JSON_FILENAME "+jsonFilename)
+print("BOARD "+boardname)
 # import the board def
 board = importlib.import_module(boardname)
 # Call the included board_specific file - it sets up 'pins' and 'fill_gaps'
@@ -47,7 +47,7 @@ pins = board.get_pins()
 pins = pinutils.append_devices_to_pin_list(pins, board)
 # -----------------------------------------------------------------------------------------
 # Documentation/functions
-jsondatas = common.get_jsondata(False, False)
+jsondatas = common.get_jsondata(False, False, board)
 # -----------------------------------------------------------------------------------------
 board.info["image_url"] = "http://www.espruino.com/img/"+boardname+".jpg"
 board.info["thumb_url"] = "http://www.espruino.com/img/"+boardname+"_thumb.jpg"
@@ -96,7 +96,7 @@ for pin in pins:
 boarddata = {
  "info" : board.info,
  "chip" : board.chip,
- "layout" : board.board,
+# "layout" : board.board,
  "devices" : board.devices,
  "pins" : pins,
  "peripherals" : pinperipherals,

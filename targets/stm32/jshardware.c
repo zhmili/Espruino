@@ -11,6 +11,9 @@
  * Platform Specific part of Hardware interface Layer
  * ----------------------------------------------------------------------------
  */
+
+
+
 #ifdef USB
  #ifdef LEGACY_USB
   #include "legacy_usb.h"
@@ -18,7 +21,7 @@
   #include "usbd_cdc_hid.h"
  #endif
 #endif
-
+#include "stm32_compat.h"
 #include "jshardware.h"
 #include "jstimer.h"
 #include "jsutils.h"
@@ -65,52 +68,22 @@ static JsSysTime jshGetTimeForSecond();
 // see jshPinWatch/jshGetWatchedPinState
 Pin watchedPins[16];
 
+// Whether a pin is being used for soft PWM or not
+BITFIELD_DECL(jshPinSoftPWM, JSH_PIN_COUNT);
+
 // simple 4 byte buffers for SPI
 #define JSH_SPIBUF_MASK 3 // 4 bytes
-volatile unsigned char jshSPIBufHead[SPIS];
-volatile unsigned char jshSPIBufTail[SPIS];
-volatile unsigned char jshSPIBuf[SPIS][4]; // 4 bytes packed into an int
+volatile unsigned char jshSPIBufHead[SPI_COUNT];
+volatile unsigned char jshSPIBufTail[SPI_COUNT];
+volatile unsigned char jshSPIBuf[SPI_COUNT][4]; // 4 bytes packed into an int
 
 #ifdef USB
 JsSysTime jshLastWokenByUSB = 0;
 #endif
 
-// Values from datasheets
-#if defined(STM32F1)
-#define V_REFINT 1.20
-#define V_TEMP_25 1.43
-#define V_TEMP_SLOPE 0.0043
-#else // defined(STM32F4)
-#define V_REFINT 1.21
-#define V_TEMP_25 0.76
-#define V_TEMP_SLOPE -0.0025
-#endif
 
 // ----------------------------------------------------------------------------
 //                                                                        PINS
-#if defined(STM32F3)
-// stupid renamed stuff
-#define EXTI2_IRQn EXTI2_TS_IRQn
-#define GPIO_Mode_AIN GPIO_Mode_AN
-#define FLASH_FLAG_WRPRTERR FLASH_FLAG_WRPERR
-#define FLASH_LockBank1 FLASH_Lock
-#define FLASH_UnlockBank1 FLASH_Unlock
-// see _gpio.h
-#define GPIO_AF_USART1 GPIO_AF_7
-#define GPIO_AF_USART2 GPIO_AF_7
-#define GPIO_AF_USART3 GPIO_AF_7
-#define GPIO_AF_UART4 GPIO_AF_5
-#define GPIO_AF_UART5 GPIO_AF_5
-#define GPIO_AF_USART6 GPIO_AF_0 // FIXME is this right?
-#define GPIO_AF_SPI1 GPIO_AF_5
-#define GPIO_AF_SPI2 GPIO_AF_5
-#endif
-
-#if defined(STM32F401xx)
-#define NO_USART3
-#endif
-
-
 
 static ALWAYS_INLINE uint8_t pinToEVEXTI(Pin ipin) {
   JsvPinInfoPin pin = pinInfo[ipin].pin;
@@ -296,7 +269,7 @@ static ALWAYS_INLINE uint8_t stmADCChannel(JsvPinInfoAnalog analog) {
 
 #ifdef STM32API2
 static ALWAYS_INLINE uint8_t functionToAF(JshPinFunction func) {
-#if defined(STM32F401xx)
+#if defined(STM32F401xx) || defined(STM32F411xx)
   assert(JSH_AF0==0 && JSH_AF15==15); // check mapping is right
   return  func & JSH_MASK_AF;
 #elif defined(STM32F4) || defined(STM32F2)
@@ -349,15 +322,15 @@ static ALWAYS_INLINE uint8_t functionToAF(JshPinFunction func) {
 }
 #endif
 
-static long long DEVICE_INITIALISED_FLAGS = 0L;
+static uint64_t DEVICE_INITIALISED_FLAGS = 0L;
 
 bool jshIsDeviceInitialised(IOEventFlags device) {
-  long long mask = 1L << (int)device;
+  uint64_t mask = 1ULL << (int)device;
   return (DEVICE_INITIALISED_FLAGS & mask) != 0L;
 }
 
 void jshSetDeviceInitialised(IOEventFlags device, bool isInit) {
-  long long mask = 1L << (int)device;
+  uint64_t mask = 1ULL << (int)device;
   if (isInit) {
     DEVICE_INITIALISED_FLAGS |= mask;
   } else {
@@ -374,42 +347,42 @@ void *setDeviceClockCmd(JshPinFunction device, FunctionalState cmd) {
   } else if (device == JSH_USART2) {
     RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART2, cmd);
     ptr = USART2;
-#ifdef USART3
+#if defined(USART3) && USART_COUNT>=3
   } else if (device == JSH_USART3) {
     RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART3, cmd);
     ptr = USART3;
 #endif
-#ifdef USART4
+#if defined(UART4) && USART_COUNT>=4
   } else if (device == JSH_USART4) {
     RCC_APB1PeriphClockCmd(RCC_APB1Periph_UART4, cmd);
     ptr = UART4;
 #endif
-#ifdef USART5
+#if defined(UART5) && USART_COUNT>=5
   } else if (device == JSH_USART5) {
     RCC_APB1PeriphClockCmd(RCC_APB1Periph_UART5, cmd);
     ptr = UART5;
 #endif
-#ifdef USART6
+#if defined(USART6) && USART_COUNT>=6
   } else if (device == JSH_USART6) {
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART6, cmd);
     ptr = USART6;
 #endif
-#if SPIS>= 1
+#if SPI_COUNT >= 1
   } else if (device==JSH_SPI1) {
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_SPI1, cmd);
     ptr = SPI1;
 #endif
-#if SPIS>= 2
+#if SPI_COUNT >= 2
   } else if (device==JSH_SPI2) {
     RCC_APB1PeriphClockCmd(RCC_APB1Periph_SPI2, cmd);
     ptr = SPI2;
 #endif
-#if SPIS>= 3
+#if SPI_COUNT >= 3
   } else if (device==JSH_SPI3) {
     RCC_APB1PeriphClockCmd(RCC_APB1Periph_SPI3, cmd);
     ptr = SPI3;
 #endif
-#if I2CS>= 1
+#if I2C_COUNT >= 1
   } else if (device==JSH_I2C1) {
       RCC_APB1PeriphClockCmd(RCC_APB1Periph_I2C1, cmd);
       /* Seems some F103 parts require this reset step - some hardware problem */
@@ -417,7 +390,7 @@ void *setDeviceClockCmd(JshPinFunction device, FunctionalState cmd) {
       RCC_APB1PeriphResetCmd(RCC_APB1Periph_I2C1, DISABLE);
       ptr = I2C1;
 #endif
-#if I2CS>= 2
+#if I2C_COUNT >= 2
   } else if (device==JSH_I2C2) {
       RCC_APB1PeriphClockCmd(RCC_APB1Periph_I2C2, cmd);
       /* Seems some F103 parts require this reset step - some hardware problem */
@@ -425,7 +398,7 @@ void *setDeviceClockCmd(JshPinFunction device, FunctionalState cmd) {
       RCC_APB1PeriphResetCmd(RCC_APB1Periph_I2C2, DISABLE);
       ptr = I2C2;
 #endif
-#if I2CS>= 3
+#if I2C_COUNT >= 3
   } else if (device==JSH_I2C3) {
       RCC_APB1PeriphClockCmd(RCC_APB1Periph_I2C3, cmd);
       /* Seems some F103 parts require this reset step - some hardware problem */
@@ -623,26 +596,6 @@ I2C_TypeDef* getI2CFromDevice(IOEventFlags device) {
  }
 }
 
-JshPinFunction getPinFunctionFromDevice(IOEventFlags device) {
- switch (device) {
-   case EV_SERIAL1 : return JSH_USART1;
-   case EV_SERIAL2 : return JSH_USART2;
-   case EV_SERIAL3 : return JSH_USART3;
-   case EV_SERIAL4 : return JSH_USART4;
-   case EV_SERIAL5 : return JSH_USART5;
-   case EV_SERIAL6 : return JSH_USART6;
-
-   case EV_SPI1    : return JSH_SPI1;
-   case EV_SPI2    : return JSH_SPI2;
-   case EV_SPI3    : return JSH_SPI3;
-
-   case EV_I2C1    : return JSH_I2C1;
-   case EV_I2C2    : return JSH_I2C2;
-   case EV_I2C3    : return JSH_I2C3;
-   default: return 0;
- }
-}
-
 unsigned int jshGetTimerFreq(TIM_TypeDef *TIMx) {
   // TIM2-7, 12-14  on APB1, everything else is on APB2
   RCC_ClocksTypeDef clocks;
@@ -685,47 +638,6 @@ static unsigned int jshGetSPIFreq(SPI_TypeDef *SPIx) {
   return APB2 ? clocks.PCLK2_Frequency : clocks.PCLK1_Frequency;
 }
 
-// Prints a list of capable pins, eg:
-// jshPrintCapablePins(..., "PWM", JSH_TIMER1, JSH_TIMERMAX, 0,0, false)
-// jshPrintCapablePins(..., "SPI", JSH_SPI1, JSH_SPIMAX, JSH_MASK_INFO,JSH_SPI_SCK, false)
-// jshPrintCapablePins(..., "Analog Input", 0,0,0,0, true) - for analogs
-static void NO_INLINE jshPrintCapablePins(Pin existingPin, const char *functionName, JshPinFunction typeMin, JshPinFunction typeMax, JshPinFunction pMask, JshPinFunction pData, bool printAnalogs) {
-  if (functionName) {
-    jsError("Pin %p is not capable of %s\nSuitable pins are:", existingPin, functionName);
-  }
-
-  Pin pin;
-  int i,n=0;
-  for (pin=0;pin<JSH_PIN_COUNT;pin++) {
-    bool has = false;
-#ifdef STM32F1
-    int af = 0;
-#endif
-    if (printAnalogs) {
-      has = pinInfo[pin].analog!=JSH_ANALOG_NONE;
-    } else {
-      for (i=0;i<JSH_PININFO_FUNCTIONS;i++) {
-        JshPinFunction type = pinInfo[pin].functions[i] & JSH_MASK_TYPE;
-        if (type>=typeMin && type<=typeMax && ((pinInfo[pin].functions[i]&pMask)==pData)) {
-          has = true;
-#ifdef STM32F1
-          af = pinInfo[pin].functions[i] & JSH_MASK_AF;
-#endif
-        }
-      }
-    }
-    if (has) {
-      jsiConsolePrintf("%p",pin);
-#ifdef STM32F1
-      if (af!=JSH_AF0) jsiConsolePrint("(AF)");
-#endif
-      jsiConsolePrint(" ");
-      if (n++==8) { n=0; jsiConsolePrint("\n"); }
-    }
-  }
-  jsiConsolePrint("\n");
-}
-
 // ----------------------------------------------------------------------------
 volatile unsigned int ticksSinceStart = 0;
 #ifdef USE_RTC
@@ -758,10 +670,10 @@ void jshSetupRTCPrescaler(bool isUsingLSI) {
 #ifdef STM32F1
     jshRTCPrescaler = 40000; // 40kHz for LSI on F1 parts
 #else
-    jshRTCPrescaler = 32768; // 32kHz for LSI
+    jshRTCPrescaler = 32000; // 32kHz for LSI on F4
 #endif
   } else {
-    jshRTCPrescaler = 32768; // 32kHz for LSE
+    jshRTCPrescaler = 32768; // 32.768kHz for LSE
   }
   jshRTCPrescalerReciprocal = (unsigned short)((((unsigned int)JSSYSTIME_SECOND) << RTC_PRESCALER_RECIPROCAL_SHIFT) /  jshRTCPrescaler);
 }
@@ -783,10 +695,10 @@ void jshDoSysTick() {
     bool alreadySetup = jshIsRTCAlreadySetup(true);
     /* LSEON, LSEBYP, RTCSEL and RTCEN are in backup domain so may not need
      * changing */
-     
+
     if (!alreadySetup) {
       bool isUsingLSI = RCC_GetFlagStatus(RCC_FLAG_LSERDY)==RESET;
-      
+
       if (RCC->BDCR & (RCC_RTCCLKSource_LSE|RCC_RTCCLKSource_LSI)) {
         // Uh-oh - RTC *was* set up for something, but it's not
         // the case any more. It needs totally resetting so we can change it
@@ -794,7 +706,7 @@ void jshDoSysTick() {
         RCC_BackupResetCmd(DISABLE);
 	    RCC_LSEConfig(RCC_LSE_ON); // reset would have turned LSE off
       }
-      
+
       if (isUsingLSI) {
         // LSE is not working - turn it off and use LSI
         RCC_RTCCLKConfig(RCC_RTCCLKSource_LSI); // set clock source to low speed internal
@@ -872,7 +784,7 @@ void jshDoSysTick() {
 
   /* One second after start, call jsinteractive. This is used to swap
    * to USB (if connected), or the Serial port. */
-  if (ticksSinceStart > 3) {
+  if (ticksSinceStart == 5) {
     jsiOneSecondAfterStartup();
   }
 }
@@ -900,15 +812,18 @@ void jshDelayMicroseconds(int microsec) {
 }
 
 ALWAYS_INLINE void jshPinSetState(Pin pin, JshPinState state) {
+  /* Make sure we kill software PWM if we set the pin state
+   * after we've started it */
+  if (BITFIELD_GET(jshPinSoftPWM, pin)) {
+    BITFIELD_SET(jshPinSoftPWM, pin, 0);
+    jstPinPWM(0,0,pin);
+  }
+
   GPIO_InitTypeDef GPIO_InitStructure;
   bool out = JSHPINSTATE_IS_OUTPUT(state);
-  bool af = state==JSHPINSTATE_AF_OUT ||
-            state==JSHPINSTATE_AF_OUT_OPENDRAIN ||
-            state==JSHPINSTATE_USART_IN ||
-            state==JSHPINSTATE_USART_OUT ||
-            state==JSHPINSTATE_I2C;
-  bool pullup = state==JSHPINSTATE_GPIO_OUT_OPENDRAIN || state==JSHPINSTATE_GPIO_IN_PULLUP || state==JSHPINSTATE_USART_IN;
-  bool pulldown = state==JSHPINSTATE_GPIO_IN_PULLDOWN;
+  bool af = JSHPINSTATE_IS_AF(state);
+  bool pullup = JSHPINSTATE_IS_PULLUP(state);
+  bool pulldown = JSHPINSTATE_IS_PULLDOWN(state);
   bool opendrain = JSHPINSTATE_IS_OPENDRAIN(state);
 
   if (out) {
@@ -1014,8 +929,11 @@ static NO_INLINE void jshPinSetFunction(Pin pin, JshPinFunction func) {
   else if ((func&JSH_MASK_TYPE)==JSH_SPI3) GPIO_PinRemapConfig( GPIO_Remap_SPI3, remap );
   else if ((func&JSH_MASK_TYPE)==JSH_USART1) GPIO_PinRemapConfig( GPIO_Remap_USART1, remap );
   else if ((func&JSH_MASK_TYPE)==JSH_USART2) GPIO_PinRemapConfig( GPIO_Remap_USART2, remap );
-  else if ((func&JSH_MASK_TYPE)==JSH_USART3) GPIO_PinRemapConfig( GPIO_FullRemap_USART3, remap );
-  else if (remap) jsError("(internal) Remap needed, but unknown device.");
+  else if ((func&JSH_MASK_TYPE)==JSH_USART3) {
+    // nasty hack because USART3 actuall has 2 different remap states
+    bool fullRemap = (JSH_PORTD_COUNT>9) && (pin==jshGetPinFromString("D8") || pin==jshGetPinFromString("D9"));
+    GPIO_PinRemapConfig( fullRemap ? GPIO_FullRemap_USART3 : GPIO_PartialRemap_USART3, remap );
+  } else if (remap) jsError("(internal) Remap needed, but unknown device %d", func&JSH_MASK_TYPE);
 
 #endif
 }
@@ -1066,6 +984,7 @@ void jshInit() {
   // reset some vars
   for (i=0;i<16;i++)
     watchedPins[i] = PIN_UNDEFINED;
+  BITFIELD_CLEAR(jshPinSoftPWM);
 
   // enable clocks
  #if defined(STM32F3)
@@ -1297,7 +1216,7 @@ void jshInit() {
   NVIC_Init(&NVIC_InitStructure);
 
   // reset SPI buffers
-  for (i=0;i<SPIS;i++) {
+  for (i=0;i<SPI_COUNT;i++) {
     jshSPIBufHead[i] = 0;
     jshSPIBufTail[i] = 0;
   }
@@ -1740,11 +1659,12 @@ unsigned int jshGetRandomNumber() {
 #endif
 }
 
-JshPinFunction jshPinAnalogOutput(Pin pin, JsVarFloat value, JsVarFloat freq) { // if freq<=0, the default is used
+JshPinFunction jshPinAnalogOutput(Pin pin, JsVarFloat value, JsVarFloat freq, JshAnalogOutputFlags flags) { // if freq<=0, the default is used
   if (value<0) value=0;
   if (value>1) value=1;
+  if (!isfinite(freq)) freq=0;
   JshPinFunction func = 0;
-  if (jshIsPinValid(pin)) {
+  if (jshIsPinValid(pin) && !(flags&JSAOF_FORCE_SOFTWARE)) {
     int i;
     for (i=0;i<JSH_PININFO_FUNCTIONS;i++) {
       if (freq<=0 && JSH_PINFUNCTION_IS_DAC(pinInfo[pin].functions[i])) {
@@ -1758,17 +1678,33 @@ JshPinFunction jshPinAnalogOutput(Pin pin, JsVarFloat value, JsVarFloat freq) { 
   }
 
   if (!func) {
+    if (jshIsPinValid(pin) && (flags&(JSAOF_ALLOW_SOFTWARE|JSAOF_FORCE_SOFTWARE))) {
+      /* we set the bit field here so that if the user changes the pin state
+       * later on, we can get rid of the IRQs */
+      if (!jshGetPinStateIsManual(pin)) {
+        BITFIELD_SET(jshPinSoftPWM, pin, 0);
+        jshPinSetState(pin, JSHPINSTATE_GPIO_OUT);
+      }
+      BITFIELD_SET(jshPinSoftPWM, pin, 1);
+      if (freq<=0) freq=50;
+      jstPinPWM(freq, value, pin);
+      return 0;
+    }
+
+    // Otherwise
     jshPrintCapablePins(pin, "PWM Output", JSH_TIMER1, JSH_TIMERMAX, 0,0, false);
-#if defined(DACS) && DACS>0
+  #if defined(DAC_COUNT) && DAC_COUNT>0
     jsiConsolePrint("\nOr pins with DAC output are:\n");
     jshPrintCapablePins(pin, 0, JSH_DAC, JSH_DAC, 0,0, false);
     jsiConsolePrint("\n");
-#endif
+  #endif
+    if (jshIsPinValid(pin))
+      jsiConsolePrint("You can also use analogWrite(pin, val, {soft:true}) for Software PWM on this pin\n");
     return 0;
   }
 
   if (JSH_PINFUNCTION_IS_DAC(func)) {
-#if defined(DACS) && DACS>0
+#if defined(DAC_COUNT) && DAC_COUNT>0
     // Special case for DAC output
     uint16_t data = (uint16_t)(value*0xFFFF);
     if ((func & JSH_MASK_INFO)==JSH_DAC_CH1) {
@@ -1916,71 +1852,6 @@ bool jshIsEventForPin(IOEvent *event, Pin pin) {
   return IOEVENTFLAGS_GETTYPE(event->flags) == pinToEVEXTI(pin);
 }
 
-/** Try and find a specific type of function for the given pin. Can be given an invalid pin and will return 0. */
-JshPinFunction NO_INLINE getPinFunctionForPin(Pin pin, JshPinFunction functionType) {
-  if (!jshIsPinValid(pin)) return 0;
-  int i;
-  for (i=0;i<JSH_PININFO_FUNCTIONS;i++) {
-    if ((pinInfo[pin].functions[i]&JSH_MASK_TYPE) == functionType)
-      return pinInfo[pin].functions[i];
-  }
-  return 0;
-}
-
-/** Try and find the best pin suitable for the given function. Can return -1. */
-Pin NO_INLINE findPinForFunction(JshPinFunction functionType, JshPinFunction functionInfo) {
-#ifdef OLIMEXINO_STM32
-  /** Hack, as you can't mix AFs on the STM32F1, and Olimexino reordered the pins
-   * such that D4(AF1) is before D11(AF0) - and there are no SCK/MISO for AF1! */
-  if (functionType == JSH_SPI1 && functionInfo==JSH_SPI_MOSI) return JSH_PORTD_OFFSET+11;
-#endif
-#ifdef PICO
-  /* On the Pico, A9 is used for sensing when USB power is applied. Is someone types in
-   * Serial1.setup(9600) it'll get chosen as it's the first pin, but setting it to an output
-   * totally messes up the STM32 as it's fed with 5V. This ensures that it won't get chosen
-   * UNLESS it is explicitly selected.
-   *
-   * TODO: better way of doing this? A JSH_DONT_DEFAULT flag for pin functions? */
-  if (functionType == JSH_USART1) {
-    if (functionInfo==JSH_USART_TX) return JSH_PORTB_OFFSET+6;
-    if (functionInfo==JSH_USART_RX) return JSH_PORTB_OFFSET+7;
-  }
-#endif
-  Pin i;
-  int j;
-  // first, try and find the pin with an AF of 0 - this is usually the 'default'
-  for (i=0;i<JSH_PIN_COUNT;i++)
-    for (j=0;j<JSH_PININFO_FUNCTIONS;j++)
-      if ((pinInfo[i].functions[j]&JSH_MASK_AF) == JSH_AF0 &&
-          (pinInfo[i].functions[j]&JSH_MASK_TYPE) == functionType &&
-          (pinInfo[i].functions[j]&JSH_MASK_INFO) == functionInfo)
-        return i;
-  // otherwise just try and find anything
-  for (i=0;i<JSH_PIN_COUNT;i++)
-    for (j=0;j<JSH_PININFO_FUNCTIONS;j++)
-      if ((pinInfo[i].functions[j]&JSH_MASK_TYPE) == functionType &&
-          (pinInfo[i].functions[j]&JSH_MASK_INFO) == functionInfo)
-        return i;
-  return PIN_UNDEFINED;
-}
-
-const char *jshPinFunctionInfoToString(JshPinFunction device, JshPinFunction info) {
-  if (JSH_PINFUNCTION_IS_USART(device)) {
-    if (info==JSH_USART_RX) return "USART RX";
-    if (info==JSH_USART_TX) return "USART TX";
-  }
-  if (JSH_PINFUNCTION_IS_SPI(device)) {
-    if (info==JSH_SPI_MISO) return "SPI MISO";
-    if (info==JSH_SPI_MOSI) return "SPI MOSI";
-    if (info==JSH_SPI_SCK) return "SPI SCK";
-  }
-  if (JSH_PINFUNCTION_IS_I2C(device)) {
-    if (info==JSH_I2C_SCL) return "I2C SCL";
-    if (info==JSH_I2C_SDA) return "I2C SDA";
-  }
-  return 0;
-}
-
 /** Usage:
  *  checkPinsForDevice(EV_SERIAL1, 2, [inf->pinRX, inf->pinTX], [JSH_USART_RX,JSH_USART_TX]);
  *
@@ -2002,16 +1873,18 @@ void *NO_INLINE checkPinsForDevice(JshPinFunction device, int count, Pin *pins, 
     for (i=0;i<count;i++)
       if (!jshIsPinValid(pins[i]) && functions[i]!=JSH_USART_CK) {
         // We don't automatically find a pin for USART CK (just RX and TX)
-        pins[i] = findPinForFunction(device, functions[i]);
+        pins[i] = jshFindPinForFunction(device, functions[i]);
       }
   // now find pin functions
   for (i=0;i<count;i++)
     if (jshIsPinValid(pins[i])) {
       // try and find correct pin
-      JshPinFunction fType = getPinFunctionForPin(pins[i], device);
+      JshPinFunction fType = jshGetPinFunctionForPin(pins[i], device);
       // print info about what pins are supported
       if (!fType || (fType&JSH_MASK_INFO)!=functions[i]) {
-        jshPrintCapablePins(pins[i], jshPinFunctionInfoToString(device, functions[i]), device, device,  JSH_MASK_INFO, functions[i], false);
+        char buf[12];
+        jshPinFunctionToString(device|functions[i], JSPFTS_DEVICE|JSPFTS_DEVICE_NUMBER|JSPFTS_SPACE|JSPFTS_TYPE, buf, sizeof(buf));
+        jshPrintCapablePins(pins[i], buf, device, device,  JSH_MASK_INFO, functions[i], false);
         return 0;
       }
       functions[i] = fType;
@@ -2029,15 +1902,14 @@ void *NO_INLINE checkPinsForDevice(JshPinFunction device, int count, Pin *pins, 
 }
 
 void jshUSARTSetup(IOEventFlags device, JshUSARTInfo *inf) {
+  assert(DEVICE_IS_USART(device));
+
   jshSetDeviceInitialised(device, true);
 
   jshSetFlowControlEnabled(device, inf->xOnXOff);
 
-  if (device == EV_USBSERIAL) {
-    return; // eep!
-  }
-
-  JshPinFunction funcType = getPinFunctionFromDevice(device);
+  JshPinFunction funcType = jshGetPinFunctionFromDevice(device);
+  if (funcType==0) return; // not a proper serial port, ignore it
 
   Pin pins[3] = { inf->pinRX, inf->pinTX, inf->pinCK };
   JshPinFunction functions[3] = { JSH_USART_RX, JSH_USART_TX, JSH_USART_CK };
@@ -2049,19 +1921,19 @@ void jshUSARTSetup(IOEventFlags device, JshUSARTInfo *inf) {
     usartIRQ = USART1_IRQn;
   } else if (device == EV_SERIAL2) {
     usartIRQ = USART2_IRQn;
-#ifdef USART3
+#if defined(USART3) && USART_COUNT>=3
   } else if (device == EV_SERIAL3) {
     usartIRQ = USART3_IRQn;
 #endif
-#if defined(UART4) && defined(UART4_IRQn)
+#if defined(UART4) && USART_COUNT>=4
   } else if (device == EV_SERIAL4) {
     usartIRQ = UART4_IRQn;
 #endif
-#if defined(UART5) && defined(UART5_IRQn)
+#if defined(UART5) && USART_COUNT>=5
   } else if (device == EV_SERIAL5) {
     usartIRQ = UART5_IRQn;
 #endif
-#ifdef USART6
+#if defined(USART6) && USART_COUNT>=6
   } else if (device == EV_SERIAL6) {
     usartIRQ = USART6_IRQn;
 #endif
@@ -2162,7 +2034,7 @@ void jshUSARTKick(IOEventFlags device) {
 /** Set up SPI, if pins are -1 they will be guessed */
 void jshSPISetup(IOEventFlags device, JshSPIInfo *inf) {
   jshSetDeviceInitialised(device, true);
-  JshPinFunction funcType = getPinFunctionFromDevice(device);
+  JshPinFunction funcType = jshGetPinFunctionFromDevice(device);
 
   enum {pinSCK, pinMISO, pinMOSI};
   Pin pins[3] = { inf->pinSCK, inf->pinMISO, inf->pinMOSI };
@@ -2207,7 +2079,7 @@ void jshSPISetup(IOEventFlags device, JshSPIInfo *inf) {
   switch (device) {
     case EV_SPI1: spiIRQ = SPI1_IRQn; break;
     case EV_SPI2: spiIRQ = SPI2_IRQn; break;
-#if SPIS>=3
+#if SPI_COUNT>=3
     case EV_SPI3: spiIRQ = SPI3_IRQn; break;
 #endif
     default: assert(0); break;
@@ -2311,7 +2183,7 @@ void jshSPIWait(IOEventFlags device) {
 /** Set up I2S, if pins are -1 they will be guessed */
 void jshI2CSetup(IOEventFlags device, JshI2CInfo *inf) {
   jshSetDeviceInitialised(device, true);
-  JshPinFunction funcType = getPinFunctionFromDevice(device);
+  JshPinFunction funcType = jshGetPinFunctionFromDevice(device);
 
   enum {pinSCL, pinSDA };
   Pin pins[2] = { inf->pinSCL, inf->pinSDA };
@@ -2376,6 +2248,7 @@ void jshI2CWrite(IOEventFlags device, unsigned char address, int nBytes, const u
   //WAIT_UNTIL(I2C_CheckEvent(I2C, I2C_EVENT_MASTER_MODE_SELECT), "I2C Write Transmit Mode 1");
   I2C_Send7bitAddress(I2C, (unsigned char)(address << 1), I2C_Direction_Transmitter);
   WAIT_UNTIL(I2C_CheckEvent(I2C, I2C_EVENT_MASTER_TRANSMITTER_MODE_SELECTED), "I2C Write Transmit Mode 2");
+
   int i;
   for (i=0;i<nBytes;i++) {
     I2C_SendData(I2C, data[i]);
@@ -2383,6 +2256,7 @@ void jshI2CWrite(IOEventFlags device, unsigned char address, int nBytes, const u
     while (!(I2C_CheckEvent(I2C, I2C_EVENT_MASTER_BYTE_TRANSMITTED)) && !jspIsInterrupted() && (timeout--)>0);
     if (timeout<=0 || jspIsInterrupted()) { jsExceptionHere(JSET_ERROR, "I2C device not responding"); }
   }
+
   if (sendStop) I2C_GenerateSTOP(I2C, ENABLE); // Send STOP Condition
 #endif
 }
@@ -2405,7 +2279,6 @@ void jshI2CRead(IOEventFlags device, unsigned char address, int nBytes, unsigned
     jsWarn("I2C got NACK");
   }
 #else
-  WAIT_UNTIL(!I2C_GetFlagStatus(I2C, I2C_FLAG_BUSY), "I2C Read BUSY");
   I2C_GenerateSTART(I2C, ENABLE);
   if (!jshI2CWaitStartBit(I2C)) {
     for (i=0;i<nBytes;i++) data[i]=0;
@@ -2428,6 +2301,7 @@ void jshI2CRead(IOEventFlags device, unsigned char address, int nBytes, unsigned
     WAIT_UNTIL(!I2C_GetFlagStatus(I2C, I2C_FLAG_STOPF), "I2C Read STOP");
     I2C_AcknowledgeConfig(I2C, ENABLE); /* re-enable ACK */
   }
+
 #endif
 }
 
@@ -2448,9 +2322,11 @@ void jshSetUSBPower(bool isOn) {
   }
 #else
   if (isOn) {
+    USB_OTG_FS->GCCFG |= USB_OTG_GCCFG_VBUSBSEN;
     USBD_Start(&hUsbDeviceFS);
-  } else {    
+  } else {
     USBD_Stop(&hUsbDeviceFS);
+    USB_OTG_FS->GCCFG &= ~(USB_OTG_GCCFG_VBUSBSEN);
   }
 #endif
 }
@@ -2478,6 +2354,7 @@ bool jshSleep(JsSysTime timeUntilWake) {
       !jshIsUSBSERIALConnected() &&
       jshLastWokenByUSB+jshGetTimeForSecond()<jshGetRTCSystemTime() && // if woken by USB, stay awake long enough for the PC to make a connection
 #endif
+      ticksSinceStart>RTC_INITIALISE_TICKS && // Don't sleep until RTC has initialised
       true
       ) {
     jsiSetSleep(JSI_SLEEP_DEEP);
@@ -2507,6 +2384,12 @@ bool jshSleep(JsSysTime timeUntilWake) {
     jshPinSetState(usbPin, JSHPINSTATE_GPIO_IN_PULLUP);
     Pin oldWatch = watchedPins[pinInfo[usbPin].pin];
     jshPinWatch(usbPin, true);
+#endif
+#ifdef USB_VSENSE_PIN
+    // USB_VSENSE_PIN is connected to USB 5v (and pulled down by a 100k resistor)
+    // ... so wake up if it goes high
+    Pin oldWatch = watchedPins[pinInfo[USB_VSENSE_PIN].pin];
+    jshPinWatch(USB_VSENSE_PIN, true);
 #endif
 #endif // USB
 
@@ -2559,12 +2442,21 @@ bool jshSleep(JsSysTime timeUntilWake) {
 #endif
     }
 #ifdef USB
+    bool wokenByUSB = false;
 #ifdef STM32F1
-    bool wokenByUSB = jshPinGetValue(usbPin)==0;
+    wokenByUSB = jshPinGetValue(usbPin)==0;
     // remove watches on pins
     jshPinWatch(usbPin, false);
     if (oldWatch!=PIN_UNDEFINED) jshPinWatch(oldWatch, true);
     jshPinSetState(usbPin, JSHPINSTATE_GPIO_IN);
+#endif
+#ifdef USB_VSENSE_PIN
+    // remove watch and restore old watch if there was one
+    // setting that we've woken lets the board stay awake
+    // until a USB connection can be established
+    if (jshPinGetValue(USB_VSENSE_PIN)) wokenByUSB=true;
+    jshPinWatch(USB_VSENSE_PIN, false);
+    if (oldWatch!=PIN_UNDEFINED) jshPinWatch(oldWatch, true);
 #endif
 #endif
     // recover oscillator
@@ -2578,10 +2470,8 @@ bool jshSleep(JsSysTime timeUntilWake) {
     RTC_WaitForSynchro(); // make sure any RTC reads will be done
 #ifdef USB
     jshSetUSBPower(true);
-#ifdef STM32F1
     if (wokenByUSB)
       jshLastWokenByUSB = jshGetRTCSystemTime();
-#endif
 #endif
     jsiSetSleep(JSI_SLEEP_AWAKE);
   } else
@@ -2720,7 +2610,7 @@ JshPinFunction jshGetCurrentPinFunction(Pin pin) {
 // Given a pin function, set that pin to the 16 bit value (used mainly for DACs and PWM)
 void jshSetOutputValue(JshPinFunction func, int value) {
   if (JSH_PINFUNCTION_IS_DAC(func)) {
-#if DACS>0
+#if DAC_COUNT>0
     uint16_t dacVal = (uint16_t)value;
     switch (func & JSH_MASK_INFO) {
     case JSH_DAC_CH1:  DAC_SetChannel1Data(DAC_Align_12b_L, dacVal); break;
@@ -2774,16 +2664,33 @@ void jshEnableWatchDog(JsVarFloat timeout) {
     IWDG_Enable();
 }
 
+volatile uint32_t *jshGetPinAddress(Pin pin, JshGetPinAddressFlags flags) {
+  if (!jshIsPinValid(pin)) return 0;
+  GPIO_TypeDef *port = stmPort(pin);
+  volatile uint32_t *regAddr;
+  if (flags == JSGPAF_INPUT)
+    regAddr = &port->IDR;
+  else
+    regAddr = &port->ODR;
+
+  uint32_t addr =  0x42000000 + ((((uint32_t)regAddr)-PERIPH_BASE)<<5) + (((uint32_t)(pinInfo[pin].pin - JSH_PIN0)<<2));
+
+  return (uint32_t*)addr;
+}
+
+
 #if defined(STM32F2) || defined(STM32F4)
 int jshFlashGetSector(uint32_t addr) {
-  addr -= FLASH_START;
 #ifdef FLASH_END // supplied by stm32fXXX.h
-  if (FLASH_START+addr > FLASH_END) return -1;
+  if (addr > FLASH_END) return -1;
 #else
   // else use what's in BOARD.py - could be less than the
   // chip might be capable of (but not specced for ;)
-  if (addr >= FLASH_TOTAL) return -1;
+  if (addr >= FLASH_TOTAL+FLASH_START) return -1;
 #endif
+  if (addr < FLASH_START) return -1;
+  addr -= FLASH_START;
+
   if (addr<16*1024) return FLASH_Sector_0;
   else if (addr<32*1024) return FLASH_Sector_1;
   else if (addr<48*1024) return FLASH_Sector_2;
@@ -2894,3 +2801,5 @@ void jshFlashWrite(void *buf, uint32_t addr, uint32_t len) {
 #endif
 #endif
 }
+
+

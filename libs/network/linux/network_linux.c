@@ -25,6 +25,7 @@
  #include <winsock.h>
 #else
  #include <sys/socket.h>
+ #include <sys/select.h>
  #include <arpa/inet.h>
  #include <netdb.h>
  #include <netinet/in.h>
@@ -224,4 +225,5 @@ void netSetCallbacks_linux(JsNetwork *net) {
   net->gethostbyname = net_linux_gethostbyname;
   net->recv = net_linux_recv;
   net->send = net_linux_send;
+  net->chunkSize = 536;
 }

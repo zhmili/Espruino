@@ -32,7 +32,7 @@ Timer systemTime;
 unsigned int systemTimeHigh;
 bool systemTimeWasHigh;
 
-serial_t mbedSerial[USARTS];
+serial_t mbedSerial[USART_COUNT];
 gpio_t mbedPins[MBED_PINS];
 extern "C" {
 
@@ -66,7 +66,7 @@ void jshInit() {
   for (i=0;i<MBED_PINS;i++) {
      gpio_init(&mbedPins[i], (PinName)(P0_0+i), PIN_INPUT);
   }
-  for (i=0;i<USARTS;i++) {
+  for (i=0;i<USART_COUNT;i++) {
     serial_init(&mbedSerial[i], USBTX, USBRX); // FIXME Pin
     serial_irq_handler(&mbedSerial[i], &mbedSerialIRQ, i);
     // serial_irq_set(&mbedSerial[i], RxIrq, 1); // FIXME Rx IRQ just crashes when called
@@ -169,8 +169,8 @@ JsVarFloat jshPinAnalog(Pin pin) {
   return value;
 }
 
-JshPinFunction jshPinAnalogOutput(Pin pin, JsVarFloat value, JsVarFloat freq) { // if freq<=0, the default is used
-  return 0;
+JshPinFunction jshPinAnalogOutput(Pin pin, JsVarFloat value, JsVarFloat freq, JshAnalogOutputFlags flags) { // if freq<=0, the default is used
+  return JSH_NOTHING;
 }
 
 void jshPinPulse(Pin pin, bool value, JsVarFloat time) {

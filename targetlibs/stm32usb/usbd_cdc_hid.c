@@ -56,16 +56,16 @@ const USBD_ClassTypeDef  USBD_CDC_HID =
 /* USB Standard Device Descriptor */
 __ALIGN_BEGIN static const uint8_t USBD_CDC_HID_DeviceQualifierDesc[USB_LEN_DEV_QUALIFIER_DESC] __ALIGN_END =
 {
-  USB_LEN_DEV_QUALIFIER_DESC,
-  USB_DESC_TYPE_DEVICE_QUALIFIER,
-  0x00,
-  0x02,
-  0x00,
-  0x00,
-  0x00,
-  0x40,
-  0x01,
-  0x00,
+  USB_LEN_DEV_QUALIFIER_DESC,    // bLength
+  USB_DESC_TYPE_DEVICE_QUALIFIER,// bDescriptorType
+  0x00,  // bcdUSB lo
+  0x02,  // bcdUSB hi
+  0x00,  // bDeviceClass
+  0x00,  // bDeviceSubClass
+  0x00,  // bDeviceProtocol
+  0x40,  // bMaxPacketSize0
+  0x01,  // bNumConfigurations
+  0x00,  // bReserved
 };
 
 
@@ -199,7 +199,7 @@ __ALIGN_BEGIN uint8_t USBD_CDC_HID_CfgDesc[USBD_CDC_HID_CFGDESC_SIZE] __ALIGN_EN
   0x01,         /*bNumEndpoints*/
   0x03,         /*bInterfaceClass: HID*/
   0x01,         /*bInterfaceSubClass : 1=BOOT, 0=no boot*/
-  0x02,         /*nInterfaceProtocol : 0=none, 1=keyboard, 2=mouse*/
+  0,            /*nInterfaceProtocol : 0=none, 1=keyboard, 2=mouse*/
   0,            /*iInterface: Index of string descriptor*/
   /******************** Descriptor of Joystick Mouse HID ********************/
   /* 18 */

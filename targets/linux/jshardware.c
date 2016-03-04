@@ -40,7 +40,7 @@
 #include <wiringPi.h>
 
  #ifdef SYSFS_GPIO_DIR
-  #error USE_WIRINGPI and SYSFS_GPIO_DIR can't coexist
+  #error USE_WIRINGPI and SYSFS_GPIO_DIR can not coexist
  #endif
 #endif
 
@@ -165,8 +165,7 @@ bool jshGetDevicePath(IOEventFlags device, char *buf, size_t bufSize) {
     jsvGetString(str, buf, bufSize);
     success = true;
   }
-  jsvUnLock(str);
-  jsvUnLock(obj);
+  jsvUnLock2(str, obj);
   return success;
 }
 
@@ -513,7 +512,7 @@ JsSysTime jshGetSystemTime() {
 #else
   struct timeval tm;
   gettimeofday(&tm, 0);
-  return tm.tv_sec*1000000L + tm.tv_usec;
+  return (JsSysTime)(tm.tv_sec)*1000000L + tm.tv_usec;
 #endif
 }
 
@@ -535,7 +534,7 @@ int jshPinAnalogFast(Pin pin) {
   return 0;
 }
 
-JshPinFunction jshPinAnalogOutput(Pin pin, JsVarFloat value, JsVarFloat freq) { // if freq<=0, the default is used
+JshPinFunction jshPinAnalogOutput(Pin pin, JsVarFloat value, JsVarFloat freq, JshAnalogOutputFlags flags) { // if freq<=0, the default is used
 #ifdef USE_WIRINGPI
   // todo pwmSetRange and pwmSetClock for freq?
   int v = (int)(value*1024);
@@ -544,7 +543,7 @@ JshPinFunction jshPinAnalogOutput(Pin pin, JsVarFloat value, JsVarFloat freq) { 
   jshPinSetState(pin, JSHPINSTATE_AF_OUT);
   pwmWrite(pin, (int)(value*1024));
 #endif
-  return 0;
+  return JSH_NOTHING;
 }
 
 void jshPinPulse(Pin pin, bool value, JsVarFloat time) {
@@ -610,7 +609,7 @@ bool jshIsEventForPin(IOEvent *event, Pin pin) {
 }
 
 void jshUSARTSetup(IOEventFlags device, JshUSARTInfo *inf) {
-  assert(DEVICE_IS_USART(device));
+  assert(DEVICE_IS_SERIAL(device));
   if (ioDevices[device]) close(ioDevices[device]);
   ioDevices[device] = 0;
   char path[256];
@@ -696,7 +695,7 @@ void jshUSARTSetup(IOEventFlags device, JshUSARTInfo *inf) {
 /** Kick a device into action (if required). For instance we may need
  * to set up interrupts */
 void jshUSARTKick(IOEventFlags device) {
-  assert(DEVICE_IS_USART(device));
+  assert(DEVICE_IS_SERIAL(device));
   // all done by the idle loop
 }
 

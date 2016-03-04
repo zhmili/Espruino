@@ -21,12 +21,12 @@
 typedef enum {
   UET_WAKEUP, ///< Does nothing except wake the device up!
   UET_SET, ///< Set a pin to a value
+  UET_EXECUTE, ///< Execute something
 #ifndef SAVE_ON_FLASH
   UET_WRITE_BYTE, ///< Write a byte to a DAC/Timer
   UET_READ_BYTE, ///< Read a byte from an analog input
   UET_WRITE_SHORT, ///< Write a short to a DAC/Timer
   UET_READ_SHORT, ///< Read a short from an analog input
-  UET_EXECUTE, ///< Execute something
 #endif
 } PACKED_FLAGS UtilTimerEventType;
 
@@ -105,6 +105,15 @@ bool jstGetLastBufferTimerTask(JsVar *var, UtilTimerTask *task);
 /// returns false if timer queue was full... Changes the state of one or more pins at a certain time (using a timer)
 bool jstPinOutputAtTime(JsSysTime time, Pin *pins, int pinCount, uint8_t value);
 
+// Do software PWM on the given pin, using the timer IRQs
+bool jstPinPWM(JsVarFloat freq, JsVarFloat dutyCycle, Pin pin);
+
+/// Execute the given function repeatedly after the given time period
+bool jstExecuteFn(void (*fn)(JsSysTime), JsSysTime period);
+
+/// Stop executing the given function
+bool jstStopExecuteFn(void (*fn)(JsSysTime));
+
 /// Set the utility timer so we're woken up in whatever time period
 bool jstSetWakeUp(JsSysTime period);
 
@@ -127,6 +136,12 @@ void jstDumpUtilityTimers();
 
 // Queue a task up to be executed when a timer fires... return false on failure
 bool utilTimerInsertTask(UtilTimerTask *task);
+
+/// Remove the task that that 'checkCallback' returns true for. Returns false if none found
+bool utilTimerRemoveTask(bool (checkCallback)(UtilTimerTask *task, void* data), void *checkCallbackData);
+
+/// If 'checkCallback' returns true for a task, set 'task' to it and return true. Returns false if none found
+bool utilTimerGetLastTask(bool (checkCallback)(UtilTimerTask *task, void* data), void *checkCallbackData, UtilTimerTask *task);
 
 #endif /* JSTIMER_H_ */
 

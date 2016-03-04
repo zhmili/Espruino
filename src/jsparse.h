@@ -53,12 +53,11 @@ JsVar *jspGetException();
 /** Return a stack trace string if there was one (and clear it) */
 JsVar *jspGetStackTrace();
 
-/** Execute code form a variable and return the result. If parseTwice is set,
- * we run over the variable twice - once to pick out function declarations,
- * and once to actually execute. */
-JsVar *jspEvaluateVar(JsVar *str, JsVar *scope, bool parseTwice);
+/** Execute code form a variable and return the result. If lineNumberOffset
+ * is nonzero it's added to the line numbers that get reported for errors/debug */
+JsVar *jspEvaluateVar(JsVar *str, JsVar *scope, uint16_t lineNumberOffset);
 /** Execute code form a string and return the result. */
-JsVar *jspEvaluate(const char *str, bool parseTwice);
+JsVar *jspEvaluate(const char *str);
 JsVar *jspExecuteFunction(JsVar *func, JsVar *thisArg, int argCount, JsVar **argPtr);
 
 /// Evaluate a JavaScript module and return its exports
@@ -94,26 +93,30 @@ typedef enum  {
   EXEC_CTRL_C = 1024, // If Ctrl-C was pressed, set this
   EXEC_CTRL_C_WAIT = 2048, // If Ctrl-C was set and SysTick happens then this is set instead
 
-  /** Parse function declarations, even if we're not executing. This
-   * is used when we want to do two passes, to effectively 'hoist' function
-   * declarations to the top so they can be called before they're defined.
-   * NOTE: This is only needed to call a function before it is defined IF
-   * code is being executed as it is being parsed. If it's in a function
-   * then you're fine anyway. */
-  EXEC_PARSE_FUNCTION_DECL = 4096,
+#ifdef USE_DEBUGGER
+  /** When the lexer hits a newline character, it'll then drop right
+   * into the debugger */
+  EXEC_DEBUGGER_NEXT_LINE = 8192,
+  /** Break when we execute a function */
+  EXEC_DEBUGGER_STEP_INTO = 16384,
+  /** Break when a function finishes execution */
+  EXEC_DEBUGGER_FINISH_FUNCTION = 32768,
+  EXEC_DEBUGGER_MASK = EXEC_DEBUGGER_NEXT_LINE | EXEC_DEBUGGER_STEP_INTO | EXEC_DEBUGGER_FINISH_FUNCTION,
+#endif
 
   EXEC_RUN_MASK = EXEC_YES|EXEC_BREAK|EXEC_CONTINUE|EXEC_INTERRUPTED|EXEC_EXCEPTION,
   EXEC_ERROR_MASK = EXEC_INTERRUPTED|EXEC_ERROR|EXEC_EXCEPTION, // here, we have an error, but unless EXEC_NO_PARSE, we should continue parsing but not executing
   EXEC_NO_PARSE_MASK = EXEC_INTERRUPTED|EXEC_ERROR, // in these cases we should exit as fast as possible - skipping out of parsing
   EXEC_SAVE_RESTORE_MASK = EXEC_YES|EXEC_IN_LOOP|EXEC_IN_SWITCH|EXEC_CONTINUE|EXEC_BREAK|EXEC_ERROR_MASK, // the things JSP_SAVE/RESTORE_EXECUTE should keep track of
   EXEC_CTRL_C_MASK = EXEC_CTRL_C | EXEC_CTRL_C_WAIT, // Ctrl-C was pressed at some point
+
 } JsExecFlags;
 
 /** This structure is used when parsing the JavaScript. It contains
  * everything that should be needed. */
 typedef struct {
-  JsVar  *root;   ///< root of symbol table
-  JsVar  *hiddenRoot;   ///< root of the symbol table that's hidden
+  JsVar  *root;       //!< root of symbol table
+  JsVar  *hiddenRoot; //!< root of the symbol table that's hidden
   JsLex *lex;
 
   // TODO: could store scopes as JsVar array for speed
@@ -122,7 +125,7 @@ typedef struct {
   /// Value of 'this' reserved word
   JsVar *thisVar;
 
-  JsExecFlags execute;
+  volatile JsExecFlags execute;
 } JsExecInfo;
 
 /* Info about execution when Parsing - this saves passing it on the stack
@@ -142,6 +145,10 @@ typedef enum {
 } JspSkipFlags;
 
 bool jspParseEmptyFunction();    ///< parse function with no arguments
+
+/** Parse using current lexer until we hit the end of
+ * input or there was some problem. */
+JsVar *jspParse();
 
 /** Handle a function call (assumes we've parsed the function name and we're
  * on the start bracket). 'thisArg' is the value of the 'this' variable when the
