@@ -47,6 +47,10 @@ of beta.  */
 
 #define CENTRAL_LINK_COUNT              0                                           /**<number of central links used by the application. When changing this number remember to adjust the RAM settings*/
 #define PERIPHERAL_LINK_COUNT           1                                           /**<number of peripheral links used by the application. When changing this number remember to adjust the RAM settings*/
+// Working out the amount of RAM we need - see softdevice_handler.h
+#define IDEAL_RAM_START_ADDRESS_INTERN(CENTRAL_LINK_COUNT, PERIPHERAL_LINK_COUNT) \
+  APP_RAM_BASE_CENTRAL_LINKS_##CENTRAL_LINK_COUNT##_PERIPH_LINKS_##PERIPHERAL_LINK_COUNT##_SEC_COUNT_0_MID_BW
+#define IDEAL_RAM_START_ADDRESS(C_LINK_CNT, P_LINK_CNT) IDEAL_RAM_START_ADDRESS_INTERN(C_LINK_CNT, P_LINK_CNT)
 
 #define DEVICE_NAME                     "Espruino "PC_BOARD_ID                      /**< Name of device. Will be included in the advertising data. */
 #define NUS_SERVICE_UUID_TYPE           BLE_UUID_TYPE_VENDOR_BEGIN                  /**< UUID type for the Nordic UART Service (vendor specific). */
@@ -54,8 +58,13 @@ of beta.  */
 #define APP_ADV_INTERVAL                1200                                        /**< The advertising interval (in units of 0.625 ms. This value corresponds to 750ms). */
 #define APP_ADV_TIMEOUT_IN_SECONDS      180                                         /**< The advertising timeout (in units of seconds). */
 
+#define SCAN_INTERVAL                   0x00A0                                      /**< Scan interval in units of 0.625 millisecond. 100ms */
+#define SCAN_WINDOW                     0x00A0                                      /**< Scan window in units of 0.625 millisecond. 100ms */
+// We want to listen as much of the time as possible. Not sure if 100/100 is feasible (50/100 is what's used in examples),
+// but it seems to work fine like this.
+
 #define APP_TIMER_PRESCALER             0                                           /**< Value of the RTC1 PRESCALER register. */
-#define APP_TIMER_OP_QUEUE_SIZE         4                                           /**< Size of timer operation queues. */
+#define APP_TIMER_OP_QUEUE_SIZE         1                                           /**< Size of timer operation queues. */
 
 #define MIN_CONN_INTERVAL               MSEC_TO_UNITS(20, UNIT_1_25_MS)             /**< Minimum acceptable connection interval (20 ms), Connection interval uses 1.25 ms units. */
 #define MAX_CONN_INTERVAL               MSEC_TO_UNITS(75, UNIT_1_25_MS)             /**< Maximum acceptable connection interval (75 ms), Connection interval uses 1.25 ms units. */
@@ -72,6 +81,8 @@ static uint16_t                         m_conn_handle = BLE_CONN_HANDLE_INVALID;
 
 static ble_uuid_t                       m_adv_uuids[] = {{BLE_UUID_NUS_SERVICE, NUS_SERVICE_UUID_TYPE}};  /**< Universally unique service identifier. */
 static bool                             ble_is_sending;
+
+#define BLE_SCAN_EVENT                  JS_EVENT_PREFIX"blescan"
 
 /**@brief Error handlers.
  *
@@ -244,7 +255,7 @@ static void conn_params_init(void)
 }
 
 void jswrap_nrf_bluetooth_startAdvertise(void) {
-  uint32_t err_code;
+  uint32_t err_code = 0;
   // Actually start advertising
   ble_gap_adv_params_t adv_params;
   memset(&adv_params, 0, sizeof(adv_params));
@@ -255,11 +266,9 @@ void jswrap_nrf_bluetooth_startAdvertise(void) {
   adv_params.timeout  = APP_ADV_TIMEOUT_IN_SECONDS;
   adv_params.interval = APP_ADV_INTERVAL;
 
-  sd_ble_gap_adv_start(&adv_params);
-
+  err_code = sd_ble_gap_adv_start(&adv_params);
   APP_ERROR_CHECK(err_code);
 }
-
 
 /**@brief Function for the application's SoftDevice event handler.
  *
@@ -306,6 +315,33 @@ static void on_ble_evt(ble_evt_t * p_ble_evt)
         jswrap_nrf_transmit_string();
         break;
 
+      case BLE_GAP_EVT_ADV_REPORT: {
+        // Advertising data received
+        const ble_gap_evt_adv_report_t *p_adv = &p_ble_evt->evt.gap_evt.params.adv_report;
+
+        JsVar *evt = jsvNewObject();
+        if (evt) {
+          jsvObjectSetChildAndUnLock(evt, "rssi", jsvNewFromInteger(p_adv->rssi));
+          jsvObjectSetChildAndUnLock(evt, "addr", jsvVarPrintf("%02x:%02x:%02x:%02x:%02x:%02x",
+              p_adv->peer_addr.addr[0],
+              p_adv->peer_addr.addr[1],
+              p_adv->peer_addr.addr[2],
+              p_adv->peer_addr.addr[3],
+              p_adv->peer_addr.addr[4],
+              p_adv->peer_addr.addr[5]));
+          JsVar *data = jsvNewStringOfLength(p_adv->dlen);
+          if (data) {
+            jsvSetString(data, p_adv->data, p_adv->dlen);
+            JsVar *ab = jsvNewArrayBufferFromString(data, p_adv->dlen);
+            jsvUnLock(data);
+            jsvObjectSetChildAndUnLock(evt, "data", ab);
+          }
+          jsiQueueObjectCallbacks(execInfo.root, BLE_SCAN_EVENT, &evt, 1);
+          jsvUnLock(evt);
+        }
+        break;
+        }
+
       default:
           // No implementation needed.
           break;
@@ -348,7 +384,14 @@ static void ble_stack_init(void)
     APP_ERROR_CHECK(err_code);
         
     //Check the ram settings against the used number of links
-    CHECK_RAM_START_ADDR(CENTRAL_LINK_COUNT,PERIPHERAL_LINK_COUNT);
+    CHECK_RAM_START_ADDR(CENTRAL_LINK_COUNT, PERIPHERAL_LINK_COUNT);
+
+    extern void __data_start__;
+    if (IDEAL_RAM_START_ADDRESS(CENTRAL_LINK_COUNT, PERIPHERAL_LINK_COUNT) != (uint32_t)&__data_start__) {
+      jsiConsolePrintf("WARNING: BLE RAM start address not correct - is 0x%x, should be 0x%x", (uint32_t)&__data_start__, IDEAL_RAM_START_ADDRESS(CENTRAL_LINK_COUNT, PERIPHERAL_LINK_COUNT));
+      jshTransmitFlush();
+    }
+
     // Enable BLE stack.
     err_code = softdevice_enable(&ble_enable_params);
     APP_ERROR_CHECK(err_code);
@@ -405,9 +448,6 @@ The USB Serial port
  */
 
 void jswrap_nrf_bluetooth_init(void) {
-  uint32_t err_code;
-  bool erase_bonds;
-  
   // Initialize.
   APP_TIMER_INIT(APP_TIMER_PRESCALER, APP_TIMER_OP_QUEUE_SIZE, false);
   ble_stack_init();
@@ -431,6 +471,8 @@ void jswrap_nrf_bluetooth_sleep(void) {
   // If connected, disconnect.
   if (m_conn_handle != BLE_CONN_HANDLE_INVALID) {
       err_code = sd_ble_gap_disconnect(m_conn_handle,  BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
+      if (err_code)
+          jsExceptionHere(JSET_ERROR, "Got BLE error code %d", err_code);
   }
 
   // Stop advertising
@@ -460,6 +502,9 @@ Get the battery level in volts
 */
 JsVarFloat jswrap_nrf_bluetooth_getBattery(void) {
   // Configure ADC
+#ifdef NRF52
+  return jshReadVRef();
+#else
   NRF_ADC->CONFIG     = (ADC_CONFIG_RES_8bit                        << ADC_CONFIG_RES_Pos)     |
                         (ADC_CONFIG_INPSEL_SupplyOneThirdPrescaling << ADC_CONFIG_INPSEL_Pos)  |
                         (ADC_CONFIG_REFSEL_VBG                      << ADC_CONFIG_REFSEL_Pos)  |
@@ -481,6 +526,7 @@ JsVarFloat jswrap_nrf_bluetooth_getBattery(void) {
   NRF_ADC->TASKS_STOP     = 1;
 
   return vbat_current_in_mv / 1000.0;
+#endif
 }
 
 /*JSON{
@@ -527,7 +573,7 @@ void jswrap_nrf_bluetooth_setAdvertising(JsVar *data) {
       JSV_GET_AS_CHAR_ARRAY(dPtr, dLen, v);
       jsvUnLock(v);
       service_data[n].data.size    = dLen;
-      service_data[n].data.p_data  = dPtr;
+      service_data[n].data.p_data  = (uint8_t*)dPtr;
       jsvObjectIteratorNext(&it);
       n++;
     }
@@ -545,9 +591,56 @@ void jswrap_nrf_bluetooth_setAdvertising(JsVar *data) {
 }
 
 /*JSON{
+    "type" : "staticmethod",
+    "class" : "NRF",
+    "name" : "setScan",
+    "generate" : "jswrap_nrf_bluetooth_setScan",
+    "params" : [
+      ["callback","JsVar","The callback to call with information about received, or undefined to stop"]
+    ]
+}
+
+Start/stop listening for BLE advertising packets within range...
+
+```
+// Start scanning
+NRF.setScan(function(d) {
+  console.log(JSON.stringify(d,null,2));
+});
+// prints {"rssi":-72, "addr":"##:##:##:##:##:##", "data":new ArrayBuffer([2,1,6,...])}
+
+// Stop Scanning
+NRF.setScan(false);
+```
+*/
+void jswrap_nrf_bluetooth_setScan(JsVar *callback) {
+  uint32_t              err_code;
+  // set the callback event variable
+  if (!jsvIsFunction(callback)) callback=0;
+  jsvObjectSetChild(execInfo.root, BLE_SCAN_EVENT, callback);
+  // either start or stop scanning
+  if (callback) {
+    ble_gap_scan_params_t     m_scan_param;
+    // non-selective scan
+    m_scan_param.active       = 0;            // Active scanning set.
+    m_scan_param.selective    = 0;            // Selective scanning not set.
+    m_scan_param.interval     = SCAN_INTERVAL;// Scan interval.
+    m_scan_param.window       = SCAN_WINDOW;  // Scan window.
+    m_scan_param.p_whitelist  = NULL;         // No whitelist provided.
+    m_scan_param.timeout      = 0x0000;       // No timeout.
+
+    err_code = sd_ble_gap_scan_start(&m_scan_param);
+  } else {
+    err_code = sd_ble_gap_scan_stop();
+  }
+  if (err_code)
+    jsExceptionHere(JSET_ERROR, "Got BLE error code %d", err_code);
+}
+
+/*JSON{
   "type" : "idle",
   "generate" : "jswrap_nrf_idle"
 }*/
 bool jswrap_nrf_idle() {
-  jswrap_nrf_transmit_string();
+  return jswrap_nrf_transmit_string()>0; // return true if we sent anything
 }

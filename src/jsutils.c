@@ -342,25 +342,21 @@ NO_INLINE void jsAssertFail(const char *file, int line, const char *expr) {
   if (!wasInAssertFail) {
     jsvTrace(jsvFindOrCreateRoot(), 2);
   }
-#ifdef FAKE_STDLIB
-#ifdef ARM
+#if defined(ARM)
   jsiConsolePrint("REBOOTING.\n");
   jshTransmitFlush();
   NVIC_SystemReset();
-#else
-  jsiConsolePrint("HALTING.\n");
-  while (1);
-#endif
-#else
-#ifdef ESP8266
+#elif defined(ESP8266)
   jsiConsolePrint("REBOOTING!\n");
   extern void jswrap_ESP8266_reboot(void);
   jswrap_ESP8266_reboot();
   while(1) ;
-#else
+#elif defined(LINUX)
   jsiConsolePrint("EXITING.\n");
   exit(1);
-#endif
+#else
+  jsiConsolePrint("HALTING.\n");
+  while (1);
 #endif
   inAssertFail = false;
 }
@@ -413,67 +409,6 @@ char *flash_strncpy(char *dst, const char *src, size_t c) {
   // terminating null
   if (slen < c) *d = 0;
   return dst;
-}
-#endif
-
-#ifdef FAKE_STDLIB
-char * strncat(char *dst, const char *src, size_t c) {
-  char *dstx = dst;
-  while (*dstx) { dstx++; c--; }
-  while (*src && c>1) {
-    *(dstx++) = *(src++);
-    c--;
-  }
-  if (c>0) *dstx = 0;
-  return dst;
-}
-char *strncpy(char *dst, const char *src, size_t c) {
-  char *dstx = dst;
-  while (*src && c) {
-    *(dstx++) = *(src++);
-    c--;
-  }
-  if (c>0) *dstx = 0;
-  return dst;
-}
-size_t strlen(const char *s) {
-  size_t l=0;
-  while (*(s++)) l++;
-  return l;
-}
-int strcmp(const char *a, const char *b) {
-  while (*a && *b) {
-    if (*a != *b)
-      return *a - *b; // correct?
-          a++;b++;
-  }
-  return *a - *b;
-}
-void *memcpy(void *dst, const void *src, size_t size) {
-  size_t i;
-  for (i=0;i<size;i++)
-    ((char*)dst)[i] = ((char*)src)[i];
-  return dst;
-}
-
-void *memset(void *dst, int c, size_t size) {
-  char *d = (char*)dst;
-  while (size--) *(d++) = (char)c;
-  return dst;
-}
-
-unsigned int rand_m_w = 0xDEADBEEF;    /* must not be zero */
-unsigned int rand_m_z = 0xCAFEBABE;    /* must not be zero */
-
-int rand() {
-  rand_m_z = 36969 * (rand_m_z & 65535) + (rand_m_z >> 16);
-  rand_m_w = 18000 * (rand_m_w & 65535) + (rand_m_w >> 16);
-  return RAND_MAX & (int)((rand_m_z << 16) + rand_m_w);  /* 32-bit result */
-}
-
-void srand(unsigned int seed) {
-  rand_m_w = (seed&0xFFFF) | (seed<<16);
-  rand_m_z = (seed&0xFFFF0000) | (seed>>16);
 }
 #endif
 
@@ -668,10 +603,10 @@ JsVarFloat wrapAround(JsVarFloat val, JsVarFloat size) {
  *
  * The supported format specifiers are:
  * * `%d` = int
- * * `%0#d` = int padded to length # with 0s
+ * * `%0#d` or `%0#x` = int padded to length # with 0s
  * * `%x` = int as hex
  * * `%L` = JsVarInt
- * * `%Lx` = JsVarInt as hex
+ * * `%Lx`= JsVarInt as hex
  * * `%f` = JsVarFloat
  * * `%s` = string (char *)
  * * `%c` = char
@@ -697,9 +632,11 @@ void vcbprintf(
       switch (fmtChar) {
       case '0': {
         int digits = (*fmt++) - '0';
-        assert('d' == *fmt); // of the form '%02d'
+         // of the form '%02d'
+        int v = va_arg(argp, int);
+        if (*fmt=='x') itostr_extra(v, buf, false, 16);
+        else { assert('d' == *fmt); itostr(v, buf, 10); }
         fmt++; // skip over 'd'
-        itostr(va_arg(argp, int), buf, 10);
         int len = (int)strlen(buf);
         while (len < digits) {
           user_callback("0",user_data);

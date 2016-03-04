@@ -887,9 +887,17 @@ JsVar *jsvNewFromPin(int pin) {
   return v;
 }
 
+JsVar *jsvNewObject() {
+  return jsvNewWithFlags(JSV_OBJECT);
+}
+
+JsVar *jsvNewEmptyArray() {
+  return jsvNewWithFlags(JSV_ARRAY);
+}
+
 /// Create an array containing the given elements
 JsVar *jsvNewArray(JsVar **elements, int elementCount) {
-  JsVar *arr = jsvNewWithFlags(JSV_ARRAY);
+  JsVar *arr = jsvNewEmptyArray();
   if (!arr) return 0;
   int i;
   for (i=0;i<elementCount;i++)
@@ -1089,7 +1097,7 @@ size_t jsvGetStringChars(const JsVar *v, size_t startChar, char *str, size_t len
 }
 
 /// Set the Data in this string. This must JUST overwrite - not extend or shrink
-void jsvSetString(JsVar *v, char *str, size_t len) {
+void jsvSetString(JsVar *v, const char *str, size_t len) {
   assert(jsvHasCharacterData(v));
   assert(len == jsvGetStringLength(v));
 
@@ -1251,6 +1259,33 @@ JsVar *jsvGetFlatStringFromPointer(char *v) {
   JsVar *flatStr = secondVar-1;
   assert(jsvIsFlatString(flatStr));
   return flatStr;
+}
+
+/// If the variable points to a *flat* area of memory, return a pointer (and set length). Otherwise return 0.
+char *jsvGetDataPointer(JsVar *v, size_t *len) {
+  assert(len);
+  if (jsvIsArrayBuffer(v)) {
+    /* Arraybuffers generally use some kind of string to store their data.
+     * Find it, then call ourselves again to figure out if we can get a
+     * raw pointer to it.  */
+    JsVar *d = jsvGetArrayBufferBackingString(v);
+    char *r = jsvGetDataPointer(d, len);
+    jsvUnLock(d);
+    if (r) {
+      r += v->varData.arraybuffer.byteOffset;
+      *len = v->varData.arraybuffer.length;
+    }
+    return r;
+  }
+  if (jsvIsNativeString(v)) {
+    *len = v->varData.nativeStr.len;
+    return (char*)v->varData.nativeStr.ptr;
+  }
+  if (jsvIsFlatString(v)) {
+    *len = jsvGetStringLength(v);
+    return jsvGetFlatStringPointer(v);
+  }
+  return 0;
 }
 
 //  IN A STRING  get the number of lines in the string (min=1)
@@ -1679,7 +1714,7 @@ JsVar *jsvArrayBufferGetFromName(JsVar *name) {
 
 
 JsVar *jsvGetFunctionArgumentLength(JsVar *functionScope) {
-  JsVar *args = jsvNewWithFlags(JSV_ARRAY);
+  JsVar *args = jsvNewEmptyArray();
   if (!args) return 0; // out of memory
 
   JsvObjectIterator it;
