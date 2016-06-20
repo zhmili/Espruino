@@ -85,7 +85,7 @@ For instance `url.parse("/a?b=c&d=e",true)` returns `{"method":"GET","host":"","
 */
 JsVar *jswrap_url_parse(JsVar *url, bool parseQuery) {
   if (!jsvIsString(url)) return 0;
-  JsVar *obj = jsvNewWithFlags(JSV_OBJECT);
+  JsVar *obj = jsvNewObject();
   if (!obj) return 0; // out of memory
 
   // scan string to try and pick stuff out
@@ -156,7 +156,7 @@ JsVar *jswrap_url_parse(JsVar *url, bool parseQuery) {
   if (parseQuery && !jsvIsNull(query)) {
     JsVar *queryStr = query;
     jsvStringIteratorNew(&it, query, 0);
-    query = jsvNewWithFlags(JSV_OBJECT);
+    query = jsvNewObject();
 
     JsVar *key = jsvNewFromEmptyString();
     JsVar *val = jsvNewFromEmptyString();
@@ -369,7 +369,7 @@ JsVar *jswrap_net_createServer(JsVar *callback) {
   "generate_full" : "jswrap_net_connect(options, callback, ST_NORMAL)",
   "params" : [
     ["options","JsVar","An object containing host,port fields"],
-    ["callback","JsVar","A function(res) that will be called when a connection is made. You can then call `res.on('data', function(data) { ... })` and `res.on('close', function() { ... })` to deal with the response."]
+    ["callback","JsVar","A `function(sckt)` that will be called  with the socket when a connection is made. You can then call `sckt.write(...)` to send data, and `sckt.on('data', function(data) { ... })` and `sckt.on('close', function() { ... })` to deal with the response."]
   ],
   "return" : ["JsVar","Returns a new net.Socket object"],
   "return_object" : "Socket"
@@ -397,17 +397,11 @@ JsVar *jswrap_net_connect(JsVar *options, JsVar *callback, SocketType socketType
 #endif
 
   // Make sure we have a function as callback, or nothing (which is OK too)
-  JsVar *skippedCallback = jsvSkipName(callback);
-  if (!jsvIsUndefined(skippedCallback)) {
-    if (!jsvIsFunction(skippedCallback)) {
-      jsError("Expecting Callback Function but got %t", skippedCallback);
-      jsvUnLock(skippedCallback);
-      return 0;
-    }
-    jsvUnLock(skippedCallback);
-  } else {
-    callback = NULL;
+  if (!jsvIsUndefined(callback) && !jsvIsFunction(callback)) {
+    jsError("Expecting Callback Function but got %t", callback);
+    return 0;
   }
+
   JsVar *rq = clientRequestNew(socketType, options, callback);
   if (unlockOptions) jsvUnLock(options);
 
@@ -467,7 +461,9 @@ require("tls").connect(options, ... );
 
 If you have the certificates as `.pem` files, you need to load these files, take the information between the lines beginning with `----`, remove the newlines from it so you have raw base64, and then feed it into `atob` as above.
 
-You can also just specify the filename and it will be loaded and parsed if you have an SD card connected. For instance `options.key = "key.pem";`.
+You can also:
+* Just specify the filename (<=100 characters) and it will be loaded and parsed if you have an SD card connected. For instance `options.key = "key.pem";`
+* Specify a function, which will be called to retrieve the data.  For instance `options.key = function() { eeprom.load_my_info(); };
 
 For more information about generating and using certificates, see:
 

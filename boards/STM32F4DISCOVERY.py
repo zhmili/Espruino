@@ -20,6 +20,12 @@ info = {
  'default_console' : "EV_SERIAL2", # FIXME: This was S2 because of pin conflict. Not sure if it's really an issue?
  'variables' : 5450,
  'binary_name' : 'espruino_%v_stm32f4discovery.bin',
+ 'build' : {
+  'defines' : [
+     'USE_GRAPHICS',
+     'USE_NET',
+   ]
+ }
 };
 chip = {
   'part' : "STM32F407VGT6",
@@ -44,7 +50,7 @@ devices = {
   'LED2' : { 'pin' : 'D12' },
   'LED3' : { 'pin' : 'D14' },
   'LED4' : { 'pin' : 'D15' },
-  'BTN1' : { 'pin' : 'A0' },
+  'BTN1' : { 'pin' : 'A0', 'pinstate' : 'IN_PULLDOWN' },
   'USB' : { 'pin_otg_pwr' : 'C0',
             'pin_dm' : 'A11',
             'pin_dp' : 'A12',

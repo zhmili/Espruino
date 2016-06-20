@@ -67,7 +67,7 @@ bool run_test(const char *filename) {
   addNativeFunction("quit", nativeQuit);
   addNativeFunction("interrupt", nativeInterrupt);
 
-  jsvUnLock(jspEvaluate(buffer));
+  jsvUnLock(jspEvaluate(buffer, false));
 
   isRunning = true;
   bool isBusy = true;
@@ -214,6 +214,9 @@ void show_help() {
     printf("Options:\n");
     printf("   -h, --help              Print this help screen\n");
     printf("   -e, --eval script       Evaluate the JavaScript supplied on the command-line\n");
+#ifdef USE_TELNET
+    printf("   --telnet                Enable internal telnet server on port 2323\n");
+#endif
     printf("   --test-all              Run all tests (in 'tests' directory)\n");
     printf("   --test test.js          Run the supplied test\n");
     printf("   --test-mem-all          Run all Exhaustive Memory crash tests\n");
@@ -245,7 +248,8 @@ int handleErrors() {
 }
 
 int main(int argc, char **argv) {
-  int i;
+  int i, args = 0;
+  const char *singleArg = 0;
   for (i=1;i<argc;i++) {
     if (argv[i][0]=='-') {
       // option
@@ -259,7 +263,7 @@ int main(int argc, char **argv) {
         jsvInit();
         jsiInit(true);
         addNativeFunction("quit", nativeQuit);
-        jsvUnLock(jspEvaluate(argv[i+1]));
+        jsvUnLock(jspEvaluate(argv[i+1], false));
         int errCode = handleErrors();
         isRunning = !errCode;
         bool isBusy = true;
@@ -269,6 +273,11 @@ int main(int argc, char **argv) {
         jsvKill();
         jshKill();
         exit(errCode);
+#ifdef USE_TELNET
+      } else if (!strcmp(a,"--telnet")) {
+        extern bool telnetEnabled;
+        telnetEnabled = true;
+#endif
       } else if (!strcmp(a,"--test")) {
         if (i+1>=argc) die("Expecting an extra argument\n");
         bool ok = run_test(argv[i+1]);
@@ -292,14 +301,17 @@ int main(int argc, char **argv) {
         show_help();
         exit(1);
       }
+    } else {
+      args++;
+      singleArg = argv[i];
     }
   }
 
-  if (argc==1) {
+  if (args==0) {
     printf("Interactive mode.\n");
-  } else if (argc==2) {
+  } else if (args==1) {
     // single file - just run it
-    char *buffer = read_file(argv[1]);
+    char *buffer = read_file(singleArg);
     if (!buffer) exit(1);
     // check for '#' as the first char, and if so, skip the first line
     char *cmd = buffer;
@@ -311,7 +323,7 @@ int main(int argc, char **argv) {
     jsvInit();
     jsiInit(false /* do not autoload!!! */);
     addNativeFunction("quit", nativeQuit);
-    jsvUnLock(jspEvaluate(cmd));
+    jsvUnLock(jspEvaluate(cmd, false));
     int errCode = handleErrors();
     free(buffer);
     isRunning = !errCode;

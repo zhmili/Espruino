@@ -16,6 +16,7 @@
 #include "jsinteractive.h"
 
 #ifdef LINUX
+#include <stdio.h>
 #include <signal.h>
 #endif//LINUX
 #ifdef USE_TRIGGER
@@ -65,11 +66,18 @@ volatile unsigned char ioHead=0, ioTail=0;
 // ----------------------------------------------------------------------------
 
 
-/**
- * Initialize all the devices.
- */
-void jshInitDevices() { // called from jshInit
+/** Initialize any device-specific structures, like flow control states.
+ * Called from jshInit */
+void jshInitDevices() {
+  jshResetDevices();
+}
+
+/** Reset any devices that could have been set up differently by JS code.
+ * Called from jshReset */
+void jshResetDevices() {
   unsigned int i;
+  // Reset list of pins that were set manually
+  jshResetPinStateIsManual();
   // setup flow control
   for (i=0;i<sizeof(jshSerialDeviceStates) / sizeof(JshSerialDeviceState);i++)
     jshSerialDeviceStates[i] = SDS_NONE;
@@ -77,6 +85,7 @@ void jshInitDevices() { // called from jshInit
   // set up callbacks for events
   for (i=EV_EXTI0;i<=EV_EXTI_MAX;i++)
     jshEventCallbacks[i-EV_EXTI0] = 0;
+
 }
 
 // ----------------------------------------------------------------------------
@@ -92,6 +101,14 @@ void jshTransmit(
     jshPushIOCharEvent(device==EV_LOOPBACKB ? EV_LOOPBACKA : EV_LOOPBACKB, (char)data);
     return;
   }
+#ifdef USE_TELNET
+  if (device == EV_TELNET) {
+    // gross hack to avoid deadlocking on the network here
+    extern void telnetSendChar(char c);
+    telnetSendChar(data);
+    return;
+  }
+#endif
 #ifndef LINUX
 #ifdef USB
   if (device==EV_USBSERIAL && !jshIsUSBSERIALConnected()) {
@@ -420,6 +437,9 @@ const char *jshGetDeviceString(
 #ifdef BLUETOOTH
   case EV_BLUETOOTH: return "Bluetooth";
 #endif
+#ifdef USE_TELNET
+  case EV_TELNET: return "Telnet";
+#endif
   case EV_SERIAL1: return "Serial1";
   case EV_SERIAL2: return "Serial2";
   case EV_SERIAL3: return "Serial3";
@@ -473,6 +493,11 @@ IOEventFlags jshFromDeviceString(
 #ifdef BLUETOOTH
   if (device[0]=='B') {
      if (strcmp(&device[1], "luetooth")==0) return EV_BLUETOOTH;
+  }
+#endif
+#ifdef USE_TELNET
+  if (device[0]=='T') {
+     if (strcmp(&device[1], "elnet")==0) return EV_TELNET;
   }
 #endif
   else if (device[0]=='S') {
