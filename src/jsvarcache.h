@@ -18,7 +18,10 @@
 #include "jsvar.h"
 
 /// reference of first unused variable (variables are in a linked list)s
-extern JsVarRef jsVarFirstEmpty;
+extern volatile JsVarRef jsVarFirstEmpty;
+
+/// Are we doing garbage collection or similar, so can't access memory?
+extern volatile bool isMemoryBusy;
 
 // For debugging/testing ONLY - maximum # of vars we are allowed to use
 void jsvSetMaxVarsUsed(unsigned int size);
@@ -39,7 +42,11 @@ void jsvSetMemoryTotal(unsigned int jsNewVarCount);
 ALWAYS_INLINE JsVarRef jsvGetRef(JsVar *var);
 
 /// SCARY - only to be used for vital stuff like load/save
+#ifdef VAR_CACHE
+JsVar *_jsvGetAddressOf(JsVarRef ref);
+#else
 ALWAYS_INLINE JsVar *_jsvGetAddressOf(JsVarRef ref);
+#endif
 
 /** Run a garbage collection sweep - return true if things have been freed */
 bool jsvGarbageCollect();

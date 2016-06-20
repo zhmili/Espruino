@@ -16,6 +16,13 @@
 
 #include "jsutils.h"
 
+#ifdef DEBUG
+  /** When freeing, clear the references (nextChild/etc) in the JsVar.
+   * This means we can assert at the end of jsvFreePtr to make sure
+   * everything really is free. */
+  #define CLEAR_MEMORY_ON_FREE
+#endif
+
 /** To avoid confusion - JsVarRefCounter should be big enough
  * to store as many refs as can possibly be created - so it's
  * safe just to set it to the same size as JsVarRef. However
