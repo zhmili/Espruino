@@ -72,7 +72,12 @@ int main(void)
     LEDS_CONFIGURE(BSP_LED_0_MASK);
     LEDS_OFF(BSP_LED_0_MASK);
 
+    nrf_gpio_pin_write(18,1);
     nrf_gpio_cfg_output(18); // led2
+    nrf_gpio_pin_write(19,1);
+    nrf_gpio_cfg_output(19); // led3
+    nrf_gpio_pin_write(20,1);
+    nrf_gpio_cfg_output(20); // led4
 
     /* Set up NFC */
     ret_val = nfcSetup(nfc_callback, NULL);
@@ -111,7 +116,7 @@ int main(void)
 
     int n = 0;
     while(1){
-      nrf_gpio_pin_write(18, ((n++)>>19)&1); // led2
+      nrf_gpio_pin_write(18, ((n++)>>20)&1); // led2
     }
 }
 
