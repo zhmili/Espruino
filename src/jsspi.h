@@ -35,3 +35,11 @@ void jsspiSend4bit(IOEventFlags device, unsigned char data, int bit0, int bit1);
 
 // Send 8 bits, but with a byte for each bit - used by jswrap_spi_send8bit. Expects SPI in 16 bit mode
 void jsspiSend8bit(IOEventFlags device, unsigned char data, int bit0, int bit1);
+
+// -------------------------------------------------------------------
+// The following are usually returned by jsspiGetSendFunction, but in some
+// rare cases you might want to use them directly
+
+int jsspiHardwareFunc(int data, spi_sender_data *info);
+int jsspiFastSoftwareFunc(int data, spi_sender_data *info);
+int jsspiSoftwareFunc(int data, spi_sender_data *info);

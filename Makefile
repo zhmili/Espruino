@@ -29,6 +29,7 @@
 # STM32F429IDISCOVERY=1
 # STM32F401CDISCOVERY=1
 # MICROBIT=1
+# DO003=1                 # NRF51-based smartwatch
 # NRF51TAG=1
 # NRF51822DK=1
 # NRF52832DK=1            # Ultra low power BLE (bluetooth low energy) enabled SoC. Arm Cortex-M4f processor. With NFC (near field communication).
@@ -451,10 +452,11 @@ EMBEDDED=1
 SAVE_ON_FLASH=1
 # Save on flash, but we still want the debugger and tab complete
 DEFINES+=-DUSE_DEBUGGER -DUSE_TAB_COMPLETE
-BOARD=DO-003
+BOARD=DO003
 OPTIMIZEFLAGS+=-Os
 USE_BLUETOOTH=1
 USE_GRAPHICS=1
+USE_LCD_SSD1306=1
 
 else ifdef NRF51TAG
 EMBEDDED=1
@@ -910,6 +912,11 @@ endif
 ifdef USE_LCD_FSMC
 DEFINES += -DUSE_LCD_FSMC
 SOURCES += libs/graphics/lcd_fsmc.c
+endif
+
+ifdef USE_LCD_SSD1306
+DEFINES += -DUSE_LCD_SSD1306
+SOURCES += libs/graphics/lcd_ssd1306.c
 endif
 
 endif

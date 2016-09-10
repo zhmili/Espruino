@@ -29,6 +29,9 @@
 #ifdef USE_LCD_FSMC
 #include "lcd_fsmc.h"
 #endif
+#ifdef USE_LCD_SSD1306
+#include "lcd_ssd1306.h"
+#endif
 
 // ----------------------------------------------------------------------------------------------
 
@@ -75,6 +78,11 @@ bool graphicsGetFromVar(JsGraphics *gfx, JsVar *parent) {
 #ifdef USE_LCD_FSMC
     if (gfx->data.type == JSGRAPHICSTYPE_FSMC) {
       lcdSetCallbacks_FSMC(gfx);
+    } else
+#endif
+#ifdef USE_LCD_SSD1306
+    if (gfx->data.type == JSGRAPHICSTYPE_SSD1306) {
+      lcdSetCallbacks_SSD1306(gfx);
     } else
 #endif
     if (gfx->data.type == JSGRAPHICSTYPE_ARRAYBUFFER) {

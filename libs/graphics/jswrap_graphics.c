@@ -25,6 +25,9 @@
 #ifdef USE_LCD_FSMC
 #include "lcd_fsmc.h"
 #endif
+#ifdef USE_LCD_SSD1306
+#include "lcd_ssd1306.h"
+#endif
 #include "bitmap_font_4x6.h"
 
 /*JSON{
@@ -66,6 +69,20 @@ void jswrap_graphics_init() {
     lcdInit_FSMC(&gfx);
     lcdSetCallbacks_FSMC(&gfx);
     graphicsSplash(&gfx);
+    graphicsSetVar(&gfx);
+    jsvUnLock2(parentObj, parent);
+  }
+#endif
+#ifdef USE_LCD_SDD1306
+  JsVar *parent = jspNewObject("g", "Graphics");
+  if (parent) {
+    JsVar *parentObj = jsvSkipName(parent);
+    JsGraphics gfx;
+    graphicsStructInit(&gfx);
+    gfx.data.type = JSGRAPHICSTYPE_SSD1306;
+    gfx.graphicsVar = parentObj;
+    lcdInit_SSD1306(&gfx);
+    lcdSetCallbacks_SSD1306(&gfx);
     graphicsSetVar(&gfx);
     jsvUnLock2(parentObj, parent);
   }
