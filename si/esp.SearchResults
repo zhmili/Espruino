@@ -1,0 +1,20 @@
+---- espruino Matches (19 in 6 files) ----
+Jshardware.c (z:\work\espruino\targets\stm32):  // see http://www.espruino.com/AdvancedDebug
+Jshardware.c (z:\work\espruino\targets\stm32):  // The Original espruino boards aren't meant to have this, but they do
+Jsinteractive.c (z:\work\espruino\src):          "          |_| http://espruino.com\n"
+Jsinteractive.c (z:\work\espruino\src):          "http://espruino.com/Donate\n"
+Jswrap_espruino.c (z:\work\espruino\src):See http://www.espruino.com/Internals for more information
+Jswrap_flash.c (z:\work\espruino\src): *   State data is saved to espruino.state
+Jswrap_flash.c (z:\work\espruino\src): *   Boot code (text JS) is saved to espruino.boot
+Jswrap_flash.c (z:\work\espruino\src):    FILE *f = fopen("espruino.boot","wb");
+Jswrap_flash.c (z:\work\espruino\src):      jsiConsolePrint("\nFile open of espruino.boot failed... \n");
+Jswrap_flash.c (z:\work\espruino\src):    FILE *f = fopen("espruino.state","wb");
+Jswrap_flash.c (z:\work\espruino\src):      FILE *f = fopen("espruino.state","rb");
+Jswrap_flash.c (z:\work\espruino\src):      jsiConsolePrint("\nFile open of espruino.state failed... \n");
+Jswrap_flash.c (z:\work\espruino\src):  FILE *f = fopen("espruino.state","rb");
+Jswrap_flash.c (z:\work\espruino\src):    jsiConsolePrint("\nFile open of espruino.state failed... \n");
+Jswrap_flash.c (z:\work\espruino\src):  FILE *f = fopen("espruino.boot","rb");
+Jswrap_flash.c (z:\work\espruino\src):  FILE *f = fopen("espruino.state","rb");
+Jswrap_interactive.c (z:\work\espruino\src):Please see http://www.espruino.com/Power+Consumption for more details on this.
+Jswrap_interactive.c (z:\work\espruino\src):Please see http://www.espruino.com/Power+Consumption for more details on this.
+Jswrap_process.c (z:\work\espruino\src):Memory units are specified in 'blocks', which are around 16 bytes each (depending on your device). See http://www.espruino.com/Performance for more information.

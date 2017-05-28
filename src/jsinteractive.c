@@ -793,13 +793,7 @@ void jsiSemiInit(bool autoLoad) {
           "\e[?7l"
 #endif
           // rectangles @ http://www.network-science.de/ascii/
-          "\n"
-          " _____                 _ \n"
-          "|   __|___ ___ ___ _ _|_|___ ___ \n"
-          "|   __|_ -| . |  _| | | |   | . |\n"
-          "|_____|___|  _|_| |___|_|_|_|___|\n"
-          "          |_| http://espruino.com\n"
-          " "JS_VERSION" Copyright 2016 G.Williams\n"
+          " http://chgckj.com\n"
         // Point out about donations - but don't bug people
         // who bought boards that helped Espruino
 #if !defined(PICO) && !defined(ESPRUINOBOARD) && !defined(ESPRUINOWIFI) && !defined(PUCKJS)
